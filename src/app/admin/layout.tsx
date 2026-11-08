@@ -13,6 +13,7 @@ import {
   AlertOctagon,
   Settings,
   ChevronRight,
+  Percent,
 } from "lucide-react";
 
 /**
@@ -33,6 +34,7 @@ export default async function AdminLayout({
   const navLinks = [
     { href: "/admin", label: "Resumen Global", icon: Shield },
     { href: "/admin/usuarios", label: "Usuarios y Roles", icon: Users },
+    { href: "/admin/comisiones", label: "Comisiones de Creadoras", icon: Percent },
     { href: "/admin/niveles", label: "Niveles (0 a 100)", icon: Award },
     { href: "/admin/membresias", label: "Membresías VIP", icon: Star },
     { href: "/admin/recargas", label: "Validar Recargas USDT", icon: Coins },

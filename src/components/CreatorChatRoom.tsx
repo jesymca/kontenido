@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { sendMessageAction } from "@/actions/creator";
 import UserLevelBadge from "@/components/UserLevelBadge";
+import { validateNoExternalContact } from "@/lib/contentFilter";
+import { AlertCircle } from "lucide-react";
 
 const CHAT_EMOJIS = ["🔥", "💋", "✨", "❤️", "😍", "😈", "👑", "📸", "💎", "🥂"];
 
@@ -60,6 +62,7 @@ export default function CreatorChatRoom({
   const [isPpv, setIsPpv] = useState(false);
   const [sending, setSending] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   const activePartner = conversations.find((c) => c.id === activePartnerId);
   const currentMessages = activePartnerId ? messagesByPartner[activePartnerId] || [] : [];
@@ -68,8 +71,18 @@ export default function CreatorChatRoom({
     e.preventDefault();
     if (!activePartnerId || !text.trim()) return;
 
-    setSending(true);
+    setChatError(null);
     const content = text.trim();
+    const filterCheck = validateNoExternalContact(content, "El mensaje");
+    if (!filterCheck.valid) {
+      setChatError(
+        filterCheck.error ||
+          "Por seguridad no se permite compartir números de teléfono, correos ni redes externas."
+      );
+      return;
+    }
+
+    setSending(true);
     const priceKoin = isPpv ? parseFloat(ppvPrice) || 0 : 0;
 
     // Optimistic message
@@ -100,7 +113,14 @@ export default function CreatorChatRoom({
       formData.set("content", content);
       formData.set("priceKoin", priceKoin.toString());
 
-      await sendMessageAction(formData);
+      const res = await sendMessageAction(formData);
+      if (res?.error) {
+        setChatError(res.error);
+        setMessagesByPartner((prev) => ({
+          ...prev,
+          [activePartnerId]: (prev[activePartnerId] || []).filter((m) => m.id !== tempId),
+        }));
+      }
     } catch (err) {
       console.error("Error sending message:", err);
     } finally {
@@ -249,6 +269,12 @@ export default function CreatorChatRoom({
 
             {/* Barra de envío */}
             <form onSubmit={handleSend} className="p-3 border-t border-slate-800 bg-slate-950/80 space-y-2">
+              {chatError && (
+                <div className="p-2.5 bg-red-950/70 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{chatError}</span>
+                </div>
+              )}
               {showEmojis && (
                 <div className="p-2 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 flex-wrap">
                   {CHAT_EMOJIS.map((emoji) => (

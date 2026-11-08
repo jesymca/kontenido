@@ -37,8 +37,8 @@ export default async function PagosPage() {
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
   const fallbackRate = parseFloat(settingsMap.get("fallback_usd_ves_rate") || "1030.88");
 
-  // 3. Evaluar tier de comisión (10%, 15%, 20%) según el volumen general acumulado
-  const tierInfo = getCreatorCommissionTier(totalEarnedKoin, settingsMap);
+  // 3. Evaluar tier de comisión (10%, 15%, 20%) según el nivel de la creadora y volumen general acumulado
+  const tierInfo = getCreatorCommissionTier(totalEarnedKoin, settingsMap, currentUser?.level);
 
   // 4. Consultar tasa de Dólar Paralelo en tiempo real desde ve.dolarapi.com
   const dolarInfo = await getDolarRates(fallbackRate);
@@ -133,7 +133,7 @@ export default async function PagosPage() {
       />
 
       {/* Sección Inferior: Administración de Cuentas y Métodos de Cobro */}
-      <div className="pt-6 border-t border-slate-800">
+      <div id="metodos-de-cobro" className="pt-6 border-t border-slate-800 scroll-mt-28">
         <div className="mb-6">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Landmark className="w-5 h-5 text-emerald-400" />

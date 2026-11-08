@@ -22,6 +22,7 @@
 - [x] F12 — Integración DolarAPI (Tasa Paralelo) + Retiros en Bolívares + Comisiones Escalonadas (10%, 15%, 20%) + Módulo de Suscriptores y Liquidaciones (DONE - 2026-11-08)
 - [x] F13 — Estabilización Dominio de Producción (kontenido.online), NextAuth trustHost, Resiliencia Vercel y Configuración Google OAuth (DONE - 2026-11-08)
 - [x] F14 — Flujo Integral de Creadora Tipo OnlyFans, KYC con Reconocimiento de Cédula (jesymca), Mensajería y Planes de Suscripción (DONE - 2026-11-08)
+- [x] F15 — CRUD de Comisiones por Nivel en SUPER_ADMIN (`/admin/comisiones`), Enlace Ancla en `/panel/pagos`, Sincronización de Nivel VIP en `/cuenta`, Navbar de Suscripciones para Consumidores y Filtro Anti-Contacto Externo (DONE - 2026-11-08)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -134,6 +135,11 @@
     - Se actualizaron los callbacks `jwt` y `session` en `src/auth.ts` para sincronizar en cada render el `id`, `username`, `role`, `kycStatus` y `level` desde Turso DB.
     - Se integró `CreatorPanelNav` de forma permanente dentro del `<header>` global en `src/components/Navbar.tsx` cuando el usuario es `CREATOR`, mostrando todo su menú de herramientas desplegado en cualquier página.
     - Se corrigió el botón *"Quiero Crear Contenido"* en `src/app/page.tsx` para que apunte siempre a `/panel` cuando hay sesión activa (en lugar de `/cuenta`).
+  - **Edición en Tiempo Real de Nombre de Usuario (`username`) y Sugerencias Inteligentes**:
+    - Se habilitó la edición del enlace del perfil (`kontenido.online/{username}`) en `src/components/ProfileForm.tsx` (`/panel/perfil`) y en `/registro` mediante el nuevo componente `src/components/UsernameAvailabilityInput.tsx`.
+    - Se implementó `checkUsernameAvailabilityAction` en `src/actions/creator.ts` para verificar disponibilidad en tiempo real contra Turso DB y rutas reservadas del sistema.
+    - Cuando el nombre está libre, el campo se ilumina en verde con el distintivo **`✓ Perfil Disponible`**.
+    - Cuando el nombre ya está ocupado (o al pulsar *"Sugerir nombres"*), despliega automáticamente botones clicables con sugerencias verificadas y disponibles basadas en la propuesta del usuario (`@nombre_ve`, `@nombre_vip`, `@soy_nombre`, `@nombre_oficial`, etc.).
 
   - **Diagnóstico del error "This page couldn’t load / A server error occurred"**:
     1. En NextAuth v5 (Auth.js), al recibir solicitudes desde dominios personalizados como `https://www.kontenido.online`, si la opción `trustHost: true` o la variable `AUTH_TRUST_HOST=true` no están definidas en la configuración base consumida por el middleware en el Edge, NextAuth lanza `[auth][error] UntrustedHost: Host must be trusted`.
@@ -147,6 +153,20 @@
   - **Configuración Google OAuth y Vercel**:
     - Documentadas las URIs de redireccionamiento requeridas para la consola de Google: `/api/auth/callback/google`.
     - Documentadas todas las variables de entorno obligatorias a cargar en el panel de Vercel (Turso, Auth.js, Google, Cloudflare R2).
+- **F15 — Comisiones por Nivel CRUD, Enlace a Métodos de Cobro, Sincronización de Niveles VIP, Navbar de Consumidores y Filtro Anti-Contacto Externo (DONE - 2026-11-08)**:
+  - **CRUD de Comisiones para Creadoras por Tramo de Nivel en SUPER_ADMIN (`/admin/comisiones`)**:
+    - Se creó la sección `/admin/comisiones` en el panel de `SUPER_ADMIN` (`src/app/admin/comisiones/page.tsx` y `src/components/AdminCommissionsCrud.tsx`) y se agregó al menú lateral (`src/app/admin/layout.tsx`).
+    - Permite agregar, editar y eliminar tramos de comisión según el nivel de la creadora (ej: Nivel 0 al 30 = 20%, Nivel 31 al 60 = 15%, Nivel 61 al 100 = 10%) así como ajustar el nivel individual de cualquier creadora.
+    - En `/panel/pagos` (`src/components/CreatorWithdrawalHub.tsx`), bajo *"Tu Comisión Actual"*, se despliega la escala completa de tramos por nivel, indicando el nivel actual de la creadora y en qué nivel exacto disminuye su porcentaje de comisión.
+  - **Enlace Ancla Directo a Métodos de Cobro en `/panel/pagos`**:
+    - En la sección *"Cuenta de Destino en Venezuela"* de `/panel/pagos`, se integró un enlace clicable (`#metodos-de-cobro`) tanto en el aviso cuando no hay cuentas configuradas como debajo del selector, llevando suavemente a la sección inferior *"Configuración de Métodos de Cobro (Venezuela y Cripto)"*.
+  - **Sincronización Dinámica de Nivel de Inversor y Descargas VIP en `/cuenta`**:
+    - Se eliminaron los textos estáticos (`Nivel 0 ($0)`, `Nivel 4 ($101+ Descargas VIP)`, `Nivel 100 ($4,900+)`) en `src/app/cuenta/page.tsx` y se sincronizaron directamente con la tabla `user_levels` de Turso DB administrada desde `/admin/niveles` (detectando dinámicamente el primer nivel con `canDownload === 1` y su monto `minSpentUsd`).
+  - **Navbar de Suscripciones para Consumidores (`ConsumerPanelNav`) y Vista `/cuenta/suscripciones`**:
+    - Se creó `src/components/ConsumerPanelNav.tsx` integrado en el `<header>` global (`src/components/Navbar.tsx`) para todos los usuarios con rol `CONSUMER`, mostrando accesos a *Explorar Creadoras*, *Mis Suscripciones*, *Billetera y VIP*, *Mensajes Privados* y píldoras directas con cada creadora a la que está suscrito para ir a ver su contenido en 1 clic.
+    - Se creó la página `/cuenta/suscripciones` (`src/app/cuenta/suscripciones/page.tsx`) con tarjetas detalladas de todos los perfiles suscritos.
+  - **Filtro Anti-Contacto Externo para Creadoras y Consumidores (`src/lib/contentFilter.ts`)**:
+    - Bloquea en servidor (`src/actions/creator.ts`) y cliente (`ProfileForm.tsx`, `SocialPostComposer.tsx`, `CreatorChatRoom.tsx`) la publicación o envío de números telefónicos (nacionales 0412/0414/0424/0416/0426 e internacionales), correos electrónicos (estándar u ofuscados), enlaces externos y menciones a WhatsApp, Telegram, Instagram, TikTok, Zelle o PayPal.
 
 
 

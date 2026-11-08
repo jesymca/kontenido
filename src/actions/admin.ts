@@ -231,6 +231,8 @@ export async function saveUserLevelConfigAction(formData: FormData): Promise<{ s
       });
 
     revalidatePath("/admin/niveles");
+    revalidatePath("/cuenta");
+    revalidatePath("/", "layout");
     return { success: true };
   } catch (err: any) {
     return { error: err.message || "Error al guardar nivel." };
@@ -478,3 +480,109 @@ export async function processPayoutAction(formData: FormData) {
   revalidatePath("/panel/pagos");
   return { success: true };
 }
+
+/**
+ * CRUD de Comisiones para Creadoras por Rango de Nivel (Crear o Editar tramo)
+ */
+export async function saveCreatorCommissionRuleAction(formData: FormData) {
+  await requireSuperAdmin();
+
+  const id = (formData.get("id") as string)?.trim() || `rule-${crypto.randomUUID().slice(0, 8)}`;
+  const minLevel = Math.max(0, Math.min(100, parseInt(formData.get("minLevel") as string) || 0));
+  const maxLevel = Math.max(minLevel, Math.min(100, parseInt(formData.get("maxLevel") as string) || 100));
+  const feePct = Math.max(0, Math.min(90, parseFloat(formData.get("feePct") as string) || 20));
+  const name = (formData.get("name") as string)?.trim() || `Nivel ${minLevel} a ${maxLevel}`;
+  const description =
+    (formData.get("description") as string)?.trim() ||
+    `Comisión del ${feePct}% para creadoras entre Nivel ${minLevel} y Nivel ${maxLevel}.`;
+
+  const allSettings = await db.query.settings.findMany();
+  const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
+
+  const { parseCreatorCommissionRules } = await import("@/lib/commissions");
+  const currentRules = parseCreatorCommissionRules(settingsMap);
+
+  const existingIdx = currentRules.findIndex((r) => r.id === id);
+  const newRule = { id, minLevel, maxLevel, feePct, name, description };
+
+  if (existingIdx >= 0) {
+    currentRules[existingIdx] = newRule;
+  } else {
+    currentRules.push(newRule);
+  }
+
+  currentRules.sort((a, b) => a.minLevel - b.minLevel);
+
+  const now = new Date().toISOString();
+  const serialized = JSON.stringify(currentRules);
+
+  await db
+    .insert(settings)
+    .values({ key: "creator_commission_rules_json", value: serialized, updatedAt: now })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value: serialized, updatedAt: now },
+    });
+
+  revalidatePath("/admin/comisiones");
+  revalidatePath("/admin/settings");
+  revalidatePath("/panel/pagos");
+  revalidatePath("/panel");
+  return { success: true };
+}
+
+/**
+ * CRUD de Comisiones para Creadoras: Eliminar un tramo de comisión
+ */
+export async function deleteCreatorCommissionRuleAction(ruleId: string) {
+  await requireSuperAdmin();
+
+  const allSettings = await db.query.settings.findMany();
+  const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
+
+  const { parseCreatorCommissionRules } = await import("@/lib/commissions");
+  const currentRules = parseCreatorCommissionRules(settingsMap);
+
+  if (currentRules.length <= 1) {
+    return { error: "Debe existir al menos un tramo de comisión activo en el sistema." };
+  }
+
+  const filtered = currentRules.filter((r) => r.id !== ruleId);
+  const now = new Date().toISOString();
+  const serialized = JSON.stringify(filtered);
+
+  await db
+    .insert(settings)
+    .values({ key: "creator_commission_rules_json", value: serialized, updatedAt: now })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value: serialized, updatedAt: now },
+    });
+
+  revalidatePath("/admin/comisiones");
+  revalidatePath("/panel/pagos");
+  return { success: true };
+}
+
+/**
+ * Actualizar directamente el Nivel (0 al 100) de una Creadora desde la sección de Comisiones
+ */
+export async function updateCreatorLevelDirectAction(formData: FormData) {
+  await requireSuperAdmin();
+
+  const creatorId = formData.get("creatorId") as string;
+  const level = Math.max(0, Math.min(100, parseInt(formData.get("level") as string) || 0));
+  const now = new Date().toISOString();
+
+  await db
+    .update(users)
+    .set({ level, updatedAt: now })
+    .where(eq(users.id, creatorId));
+
+  revalidatePath("/admin/comisiones");
+  revalidatePath("/admin/usuarios");
+  revalidatePath("/panel/pagos");
+  revalidatePath("/panel");
+  return { success: true };
+}
+

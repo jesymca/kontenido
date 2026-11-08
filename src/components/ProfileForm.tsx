@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { updateProfileAction } from "@/actions/creator";
+import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
+import { validateNoExternalContact } from "@/lib/contentFilter";
 import {
   Check,
   AlertCircle,
@@ -31,9 +34,13 @@ interface Props {
 }
 
 export default function ProfileForm({ profile, username, kycStatus = "NONE" }: Props) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [displayNameState, setDisplayNameState] = useState(profile?.displayName || username);
+  const [activeUsername, setActiveUsername] = useState(username);
+  const [isUsernameValid, setIsUsernameValid] = useState(true);
 
   // Estados de imágenes
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -69,12 +76,30 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!isUsernameValid) {
+      setError("Por favor elige un nombre de usuario disponible antes de guardar.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSuccess(false);
 
     const formEl = e.currentTarget;
     const formData = new FormData(formEl);
+
+    const checkName = validateNoExternalContact(formData.get("displayName") as string, "El nombre para mostrar");
+    if (!checkName.valid) {
+      setError(checkName.error || "Contenido no permitido.");
+      setLoading(false);
+      return;
+    }
+    const checkBio = validateNoExternalContact(formData.get("bio") as string, "La biografía");
+    if (!checkBio.valid) {
+      setError(checkBio.error || "Contenido no permitido.");
+      setLoading(false);
+      return;
+    }
 
     try {
       if (avatarFile) {
@@ -98,10 +123,15 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
         return;
       }
 
+      if (res.username) {
+        setActiveUsername(res.username);
+      }
+
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3500);
       setLoading(false);
       setUploadProgress(null);
+      router.refresh();
     } catch (err: any) {
       setError(err.message || "Error al actualizar perfil.");
       setLoading(false);
@@ -203,38 +233,30 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
       </div>
 
       {/* 2. DATOS DE IDENTIDAD Y TEXTOS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 items-start">
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+          <label className="block text-xs font-semibold text-slate-300 mb-2">
             Nombre para Mostrar (Público)
           </label>
           <input
             name="displayName"
             type="text"
             required
-            defaultValue={profile?.displayName || username}
+            value={displayNameState}
+            onChange={(e) => setDisplayNameState(e.target.value)}
             placeholder="ej: Vanessa Gómez"
             className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:border-rose-500 focus:outline-hidden"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-            Nombre de Usuario (Enlace del perfil)
-          </label>
-          <div className="relative">
-            <span className="absolute left-3.5 top-2.5 text-slate-500 text-sm">@</span>
-            <input
-              type="text"
-              disabled
-              value={username}
-              className="w-full bg-slate-950/60 border border-slate-800/80 rounded-xl py-2.5 pl-8 pr-4 text-slate-400 text-sm cursor-not-allowed"
-            />
-          </div>
-          <span className="text-[11px] text-slate-500 mt-1 block">
-            Tu enlace público es:{" "}
-            <strong className="text-slate-300">kontenido.online/{username}</strong>
-          </span>
+          <UsernameAvailabilityInput
+            initialUsername={activeUsername}
+            currentUsername={activeUsername}
+            displayNameHint={displayNameState}
+            label="Nombre de Usuario (Enlace del perfil)"
+            onValidityChange={(valid) => setIsUsernameValid(valid)}
+          />
         </div>
       </div>
 

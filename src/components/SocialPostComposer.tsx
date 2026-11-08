@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { createPostAction } from "@/actions/creator";
+import { validateNoExternalContact } from "@/lib/contentFilter";
 
 const QUICK_EMOJIS = ["🔥", "💋", "✨", "👑", "📸", "🌴", "💖", "😍", "😈", "🥂", "💎", "⭐", "🎉", "👀"];
 
@@ -78,6 +79,18 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
 
     if (!title.trim()) {
       setError("Por favor escribe un título para tu publicación.");
+      return;
+    }
+
+    const titleCheck = validateNoExternalContact(title, "El título de la publicación");
+    if (!titleCheck.valid) {
+      setError(titleCheck.error || "No se permiten datos de contacto externo.");
+      return;
+    }
+
+    const descCheck = validateNoExternalContact(description, "La descripción de la publicación");
+    if (!descCheck.valid) {
+      setError(descCheck.error || "No se permiten datos de contacto externo.");
       return;
     }
 

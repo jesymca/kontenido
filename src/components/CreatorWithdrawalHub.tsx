@@ -75,12 +75,25 @@ interface SubscriberItem {
 }
 
 interface TierInfo {
-  tierNumber: 1 | 2 | 3;
+  tierNumber: number;
   name: string;
   description: string;
   feePct: number;
   minVolume: number;
   maxVolume: number;
+  minLevel?: number;
+  maxLevel?: number;
+  currentLevel?: number;
+  nextLevelTarget?: number | null;
+  nextFeePct?: number | null;
+  allRules?: Array<{
+    id: string;
+    minLevel: number;
+    maxLevel: number;
+    feePct: number;
+    name: string;
+    description: string;
+  }>;
   koinToNextTier?: number;
   progressToNextPct?: number;
 }
@@ -215,23 +228,90 @@ export default function CreatorWithdrawalHub({
         <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-rose-500/30 rounded-3xl p-5 shadow-xl flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
             <span className="font-semibold uppercase tracking-wider">Tu Comisión Actual</span>
-            <Percent className="w-4 h-4 text-rose-400" />
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              Nivel {tierInfo.currentLevel ?? 0}
+            </span>
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-2xl sm:text-3xl font-black text-rose-400">
                 {tierInfo.feePct}%
               </span>
               <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                {tierInfo.name.split("—")[1] || tierInfo.name}
+                {tierInfo.name.split("—")[0]?.trim() || tierInfo.name}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">
-              Volumen acumulado: <strong>${totalEarnedKoin.toFixed(2)} KOIN</strong>
+            <p className="text-[11px] text-slate-300 mt-1.5">
+              Tramo actual: <strong>Nivel {tierInfo.minLevel ?? 0} al {tierInfo.maxLevel ?? 30}</strong>
             </p>
+            {tierInfo.nextLevelTarget != null && tierInfo.nextFeePct != null ? (
+              <p className="text-[11px] text-emerald-400 mt-0.5 font-medium">
+                Al alcanzar el <strong>Nivel {tierInfo.nextLevelTarget}</strong> tu comisión baja al <strong>{tierInfo.nextFeePct}%</strong>
+              </p>
+            ) : (
+              <p className="text-[11px] text-emerald-400 mt-0.5 font-medium">
+                ¡Disfrutas del tramo preferencial más bajo de comisión!
+              </p>
+            )}
           </div>
         </div>
       </div>
+
+      {/* DESPLIEGUE DETALLADO DE TRAMOS DE COMISIÓN POR NIVEL */}
+      {tierInfo.allRules && tierInfo.allRules.length > 0 && (
+        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                Escala de Comisiones por Nivel de Creadora
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Conoce exactamente en qué nivel disminuye tu porcentaje de comisión de plataforma. Tu nivel actual es <strong className="text-amber-400">Nivel {tierInfo.currentLevel ?? 0}</strong> (Volumen acumulado: ${totalEarnedKoin.toFixed(2)} KOIN).
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {tierInfo.allRules.map((rule) => {
+              const currentLvl = tierInfo.currentLevel ?? 0;
+              const isCurrent = currentLvl >= rule.minLevel && currentLvl <= rule.maxLevel;
+              return (
+                <div
+                  key={rule.id}
+                  className={`p-3.5 rounded-2xl border transition flex flex-col justify-between ${
+                    isCurrent
+                      ? "bg-rose-950/30 border-rose-500/50 shadow-md shadow-rose-950/30"
+                      : "bg-slate-950/70 border-slate-800/80 opacity-80"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-400">
+                        Nivel {rule.minLevel} al {rule.maxLevel}
+                      </span>
+                      {isCurrent && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-500 text-white uppercase">
+                          Tu Nivel Actual
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xl font-black text-white">{rule.feePct}%</span>
+                      <span className="text-[11px] text-emerald-400 font-bold">
+                        (Recibes {100 - rule.feePct}% neto)
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-semibold text-slate-300 mt-1">{rule.name}</p>
+                  </div>
+                  {rule.description && (
+                    <p className="text-[10px] text-slate-400 mt-1.5 leading-snug">{rule.description}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 2. PESTAÑAS DE NAVEGACIÓN */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -342,22 +422,46 @@ export default function CreatorWithdrawalHub({
                   Cuenta de Destino en Venezuela
                 </label>
                 {paymentMethods.length > 0 ? (
-                  <select
-                    value={selectedMethodId}
-                    onChange={(e) => setSelectedMethodId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-xs text-white focus:border-rose-500 focus:outline-hidden"
-                  >
-                    {paymentMethods.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.type === "BANK_TRANSFER" && `Transferencia: ${m.bank?.nombreBanco || "Banco"} — ${m.accountNumber}`}
-                        {m.type === "PAGOMOVIL" && `PagoMóvil: ${m.bank?.nombreBanco || "Banco"} — Tel: ${m.phone} (${m.idDocument || ""})`}
-                        {m.type === "BINANCE" && `Binance USDT: ${m.binanceEmail}`}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="space-y-1.5">
+                    <select
+                      value={selectedMethodId}
+                      onChange={(e) => setSelectedMethodId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-xs text-white focus:border-rose-500 focus:outline-hidden"
+                    >
+                      {paymentMethods.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.type === "BANK_TRANSFER" && `Transferencia: ${m.bank?.nombreBanco || "Banco"} — ${m.accountNumber}`}
+                          {m.type === "PAGOMOVIL" && `PagoMóvil: ${m.bank?.nombreBanco || "Banco"} — Tel: ${m.phone} (${m.idDocument || ""})`}
+                          {m.type === "BINANCE" && `Binance USDT: ${m.binanceEmail}`}
+                        </option>
+                      ))}
+                    </select>
+                    <a
+                      href="#metodos-de-cobro"
+                      className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold hover:underline"
+                    >
+                      + Agregar o editar cuenta en Configuración de Métodos de Cobro (abajo) ↓
+                    </a>
+                  </div>
                 ) : (
-                  <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-2xl text-xs text-amber-300">
-                    Aún no tienes cuentas configuradas. Ve a la sección inferior de Métodos de Cobro para agregar tu cuenta bancaria o PagoMóvil.
+                  <div className="p-3.5 bg-amber-950/40 border border-amber-500/40 rounded-2xl text-xs text-amber-300 space-y-2">
+                    <p>
+                      Aún no tienes cuentas configuradas. Ve a la sección inferior de{" "}
+                      <a
+                        href="#metodos-de-cobro"
+                        className="font-bold text-amber-200 underline hover:text-white transition"
+                      >
+                        Métodos de Cobro
+                      </a>{" "}
+                      para agregar tu cuenta bancaria o PagoMóvil.
+                    </p>
+                    <a
+                      href="#metodos-de-cobro"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold text-[11px] border border-amber-500/40 transition"
+                    >
+                      <Landmark className="w-3.5 h-3.5" />
+                      Ir a Configuración de Métodos de Cobro (Venezuela y Cripto) ↓
+                    </a>
                   </div>
                 )}
               </div>

@@ -16,15 +16,146 @@ import {
   settings,
   creatorSubscriptionPlans,
   messages,
+  users,
 } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import { copyObjectInR2, BUCKETS } from "@/lib/r2";
 import { revalidatePath } from "next/cache";
 import { getDolarRates } from "@/lib/dolarapi";
 import { getCreatorCommissionTier } from "@/lib/commissions";
+import { validateNoExternalContact } from "@/lib/contentFilter";
+
+const RESERVED_USERNAMES = new Set([
+  "admin",
+  "panel",
+  "cuenta",
+  "login",
+  "registro",
+  "agencia",
+  "suspendido",
+  "api",
+  "img",
+  "mensajes",
+  "settings",
+  "soporte",
+  "kontenido",
+  "root",
+  "support",
+]);
 
 /**
- * Actualizar perfil público de la Creadora
+ * Valida en tiempo real si un nombre de usuario (enlace de perfil) está disponible
+ * y, en caso de estar ocupado, sugiere nombres alternativos disponibles basados en la propuesta.
+ */
+export async function checkUsernameAvailabilityAction(
+  rawProposed: string,
+  currentUsername?: string,
+  displayNameHint?: string
+) {
+  const clean = (rawProposed || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 30);
+
+  if (clean.length < 3) {
+    return {
+      available: false,
+      isCurrent: false,
+      cleanUsername: clean,
+      reason: "Debe tener al menos 3 caracteres (letras, números o guion bajo).",
+      suggestions: [] as string[],
+    };
+  }
+
+  if (currentUsername && clean === currentUsername.toLowerCase().trim()) {
+    return {
+      available: true,
+      isCurrent: true,
+      cleanUsername: clean,
+      reason: "Es tu nombre de usuario actual.",
+      suggestions: [] as string[],
+    };
+  }
+
+  let isTaken = RESERVED_USERNAMES.has(clean);
+
+  if (!isTaken) {
+    const existing = await db.query.users.findFirst({
+      where: eq(users.username, clean),
+      columns: { id: true },
+    });
+    if (existing) {
+      isTaken = true;
+    }
+  }
+
+  if (!isTaken) {
+    return {
+      available: true,
+      isCurrent: false,
+      cleanUsername: clean,
+      reason: "Perfil Disponible",
+      suggestions: [] as string[],
+    };
+  }
+
+  // Generar candidatos inteligentes basados en el nombre propuesto y el nombre para mostrar
+  const base = clean.replace(/_+$/, "").slice(0, 20) || "creadora";
+  const hintClean = (displayNameHint || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 22);
+
+  const rand1 = Math.floor(10 + Math.random() * 89);
+  const rand2 = Math.floor(100 + Math.random() * 899);
+
+  const rawCandidates = [
+    `${base}_ve`,
+    `${base}_vip`,
+    `${base}_oficial`,
+    `soy_${base}`,
+    `${base}_vzla`,
+    `${base}_exclusive`,
+    ...(hintClean && hintClean.length >= 3 && hintClean !== base
+      ? [hintClean, `${hintClean}_ve`, `${hintClean}_vip`]
+      : []),
+    `${base}_${rand1}`,
+    `${base}_ve${rand1}`,
+    `${base}_${rand2}`,
+  ]
+    .map((c) => c.slice(0, 30))
+    .filter((c) => c.length >= 3 && !RESERVED_USERNAMES.has(c));
+
+  const uniqueCandidates = Array.from(new Set(rawCandidates));
+
+  const takenRows =
+    uniqueCandidates.length > 0
+      ? await db
+          .select({ username: users.username })
+          .from(users)
+          .where(inArray(users.username, uniqueCandidates))
+      : [];
+
+  const takenSet = new Set(takenRows.map((r) => r.username));
+  const availableSuggestions = uniqueCandidates.filter((c) => !takenSet.has(c)).slice(0, 5);
+
+  return {
+    available: false,
+    isCurrent: false,
+    cleanUsername: clean,
+    reason: "Este enlace de perfil ya está ocupado. Elige una sugerencia disponible:",
+    suggestions: availableSuggestions,
+  };
+}
+
+/**
+ * Actualizar perfil público de la Creadora (incluyendo edición del enlace / username)
  */
 export async function updateProfileAction(formData: FormData) {
   const session = await auth();
@@ -34,6 +165,11 @@ export async function updateProfileAction(formData: FormData) {
 
   const userId = session.user.id;
   const displayName = (formData.get("displayName") as string)?.trim();
+  const rawUsername = (formData.get("username") as string)
+    ?.toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
   const bio = (formData.get("bio") as string)?.trim();
   const priceRaw = formData.get("subscriptionPriceKoin") as string;
   const subscriptionPriceKoin = parseFloat(priceRaw) || 10.0;
@@ -45,7 +181,52 @@ export async function updateProfileAction(formData: FormData) {
     return { error: "El nombre para mostrar es obligatorio." };
   }
 
+  // Bloquear números de teléfono, correos o intentos de contacto externo
+  const nameFilter = validateNoExternalContact(displayName, "El nombre para mostrar");
+  if (!nameFilter.valid) {
+    return { error: nameFilter.error };
+  }
+  const bioFilter = validateNoExternalContact(bio, "La biografía / texto de bienvenida");
+  if (!bioFilter.valid) {
+    return { error: bioFilter.error };
+  }
+
   const now = new Date().toISOString();
+  let finalUsername = session.user.username;
+
+  // Si el usuario editó su nombre de usuario (enlace del perfil), validar disponibilidad y actualizar
+  if (rawUsername && rawUsername !== session.user.username) {
+    if (rawUsername.length < 3 || rawUsername.length > 30 || !/^[a-z0-9_]+$/.test(rawUsername)) {
+      return {
+        error: "El nombre de usuario debe tener entre 3 y 30 caracteres (solo letras minúsculas, números y guion bajo).",
+      };
+    }
+
+    if (RESERVED_USERNAMES.has(rawUsername)) {
+      return { error: "Ese nombre de usuario está reservado por el sistema. Elige otro." };
+    }
+
+    const existingUser = await db.query.users.findFirst({
+      where: and(eq(users.username, rawUsername), ne(users.id, userId)),
+      columns: { id: true },
+    });
+
+    if (existingUser) {
+      return {
+        error: "Ese nombre de usuario ya está ocupado. Selecciona una de las sugerencias disponibles.",
+      };
+    }
+
+    await db
+      .update(users)
+      .set({
+        username: rawUsername,
+        updatedAt: now,
+      })
+      .where(eq(users.id, userId));
+
+    finalUsername = rawUsername;
+  }
 
   await db
     .update(profiles)
@@ -60,10 +241,13 @@ export async function updateProfileAction(formData: FormData) {
     })
     .where(eq(profiles.userId, userId));
 
+  revalidatePath("/", "layout");
   revalidatePath(`/${session.user.username}`);
+  revalidatePath(`/${finalUsername}`);
+  revalidatePath("/panel");
   revalidatePath("/panel/perfil");
 
-  return { success: true };
+  return { success: true, username: finalUsername };
 }
 
 /**
@@ -183,6 +367,16 @@ export async function createPostAction(formData: FormData) {
 
   if (!title) {
     return { error: "El título de la publicación es obligatorio." };
+  }
+
+  // Bloquear números de teléfono, correos o intentos de contacto fuera de la plataforma
+  const titleFilter = validateNoExternalContact(title, "El título de la publicación");
+  if (!titleFilter.valid) {
+    return { error: titleFilter.error };
+  }
+  const descFilter = validateNoExternalContact(description, "La descripción de la publicación");
+  if (!descFilter.valid) {
+    return { error: descFilter.error };
   }
 
   const now = new Date().toISOString();
@@ -367,12 +561,15 @@ export async function requestPayoutAction(formData: FormData) {
     return { error: "El método de cobro seleccionado no es válido o está inactivo." };
   }
 
-  // 3. Consultar configuraciones y calcular comisión escalonada (10%, 15%, 20%)
+  // 3. Consultar configuraciones y calcular comisión escalonada por Nivel de Creadora (ej: Nivel 0-30 = 20%, 31-60 = 15%)
+  const currentUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+  });
   const allSettings = await db.query.settings.findMany();
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
   const fallbackRate = parseFloat(settingsMap.get("fallback_usd_ves_rate") || "1030.88");
 
-  const tierInfo = getCreatorCommissionTier(wallet.totalEarnedKoin || 0, settingsMap);
+  const tierInfo = getCreatorCommissionTier(wallet.totalEarnedKoin || 0, settingsMap, currentUser?.level);
 
   // 4. Consultar API DolarApi en tiempo real (Tasa Paralelo de Venezuela)
   const dolarInfo = await getDolarRates(fallbackRate);
@@ -463,6 +660,15 @@ export async function saveSubscriptionPlanAction(formData: FormData) {
     return { error: "El nombre y un precio válido en KOIN son requeridos." };
   }
 
+  const planNameFilter = validateNoExternalContact(name, "El nombre del plan");
+  if (!planNameFilter.valid) {
+    return { error: planNameFilter.error };
+  }
+  const planDescFilter = validateNoExternalContact(description, "La descripción del plan");
+  if (!planDescFilter.valid) {
+    return { error: planDescFilter.error };
+  }
+
   if (durationDays < 1) {
     return { error: "La duración debe ser de al menos 1 día." };
   }
@@ -542,6 +748,14 @@ export async function sendMessageAction(formData: FormData) {
 
   if (!receiverId || (!content && !mediaKey)) {
     return { error: "Destinatario y contenido son obligatorios." };
+  }
+
+  // Bloquear números de teléfono, correos o intentos de comunicarse fuera de la plataforma (tanto para Creadoras como para Consumidores)
+  if (content) {
+    const msgFilter = validateNoExternalContact(content, "El mensaje");
+    if (!msgFilter.valid) {
+      return { error: msgFilter.error };
+    }
   }
 
   const now = new Date().toISOString();

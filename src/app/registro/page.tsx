@@ -8,6 +8,7 @@ import { Sparkles, Eye, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2 } fro
 import { registerCreatorAction, registerConsumerAction } from "@/actions/auth";
 import { signIn } from "next-auth/react";
 import PasswordInput from "@/components/PasswordInput";
+import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
 
 /**
  * Pantalla de registro de KONTENIDO
@@ -194,21 +195,9 @@ export default function RegistroPage() {
 
         {/* Formulario de registro */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Nombre de usuario (Tu enlace será: kontenido.online/{'{tu_usuario}'})
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-3 text-slate-500 text-sm">@</span>
-              <input
-                name="username"
-                type="text"
-                required
-                placeholder="ej: vanessa_ve"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-8 pr-4 text-white placeholder-slate-600 text-sm focus:outline-hidden focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition"
-              />
-            </div>
-          </div>
+          <UsernameAvailabilityInput
+            label="Nombre de usuario (Enlace del perfil)"
+          />
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">

@@ -2,10 +2,11 @@ import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import UserLevelBadge from "./UserLevelBadge";
 import CreatorPanelNav from "./CreatorPanelNav";
+import ConsumerPanelNav, { type SubscribedCreatorItem } from "./ConsumerPanelNav";
 import { Coins, Shield, Sparkles, LayoutDashboard, LogOut, User, DollarSign } from "lucide-react";
 import { db } from "@/lib/db";
-import { wallets, vipMemberships, users } from "@/lib/db/schema";
-import { eq, or } from "drizzle-orm";
+import { wallets, vipMemberships, users, subscriptions, profiles } from "@/lib/db/schema";
+import { eq, or, desc } from "drizzle-orm";
 import Image from "next/image";
 
 /**
@@ -26,6 +27,7 @@ export default async function Navbar() {
   let effectiveUsername = sessionUser?.username || "";
   let effectiveKycStatus = sessionUser?.kycStatus || "NONE";
   let effectiveLevel = sessionUser?.level || 0;
+  let consumerSubscriptions: SubscribedCreatorItem[] = [];
 
   if (sessionUser) {
     try {
@@ -62,6 +64,38 @@ export default async function Navbar() {
         if (membership) {
           vipBadgeText = membership.badgeText;
           vipBadgeColor = membership.badgeColor;
+        }
+      }
+
+      // Si es CONSUMIDOR, cargar los perfiles a los que está suscrito para el Navbar rápido
+      if (effectiveRole === "CONSUMER" && targetUserId) {
+        const subs = await db.query.subscriptions.findMany({
+          where: eq(subscriptions.subscriberId, targetUserId),
+          orderBy: [desc(subscriptions.startsAt)],
+          with: {
+            creator: true,
+          },
+        });
+        if (subs.length > 0) {
+          const allProfiles = await db.query.profiles.findMany();
+          const profileMap = new Map(allProfiles.map((p) => [p.userId, p]));
+          const nowIso = new Date().toISOString();
+          const seenCreators = new Set<string>();
+
+          for (const s of subs) {
+            if (!s.creator || seenCreators.has(s.creatorId)) continue;
+            if (s.status === "ACTIVE" && s.endsAt >= nowIso) {
+              seenCreators.add(s.creatorId);
+              const prof = profileMap.get(s.creatorId);
+              consumerSubscriptions.push({
+                creatorId: s.creatorId,
+                username: s.creator.username,
+                displayName: prof?.displayName || s.creator.username,
+                avatarUrl: prof?.avatarKey ? `/api/media/${prof.avatarKey}` : null,
+                endsAt: s.endsAt,
+              });
+            }
+          }
         }
       }
     } catch (err) {
@@ -216,6 +250,11 @@ export default async function Navbar() {
           kycStatus={effectiveKycStatus}
           inHeader
         />
+      )}
+
+      {/* Menú desplegado permanente para Consumidores con sus perfiles suscritos */}
+      {sessionUser && effectiveRole === "CONSUMER" && (
+        <ConsumerPanelNav subscriptions={consumerSubscriptions} />
       )}
     </header>
   );

@@ -58,11 +58,19 @@ export default async function CuentaPage() {
     where: eq(vipMemberships.isActive, 1),
   });
 
-  // 6. Obtener nivel actual y siguiente
-  const currentLevelNum = user?.level || 0;
-  const currentLevel = await db.query.userLevels.findFirst({
-    where: eq(userLevels.levelNumber, currentLevelNum),
+  // 6. Obtener todos los niveles sincronizados con SUPER_ADMIN (/admin/niveles)
+  const allLevels = await db.query.userLevels.findMany({
+    orderBy: (ul, { asc }) => [asc(ul.levelNumber)],
   });
+  const currentLevelNum = user?.level || 0;
+  const currentLevel =
+    allLevels.find((l) => l.levelNumber === currentLevelNum) ||
+    allLevels[0] ||
+    null;
+  const minLvl = allLevels[0];
+  const vipDownloadLvl = allLevels.find((l) => l.canDownload === 1);
+  const maxLvl = allLevels[allLevels.length - 1];
+  const nextLvl = allLevels.find((l) => l.levelNumber > currentLevelNum);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -164,11 +172,27 @@ export default async function CuentaPage() {
               />
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
-              <span>Nivel 0 ($0)</span>
-              <span>Nivel 4 ($101+ Descargas VIP)</span>
-              <span>Nivel 100 ($4,900+)</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 mt-2.5">
+              <span>
+                Nivel {minLvl?.levelNumber ?? 0} (${(minLvl?.minSpentUsd ?? 0).toLocaleString("en-US")})
+              </span>
+              {vipDownloadLvl ? (
+                <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                  <Download className="w-3 h-3" />
+                  Nivel {vipDownloadLvl.levelNumber} (${vipDownloadLvl.minSpentUsd.toLocaleString("en-US")}+ Descargas VIP)
+                </span>
+              ) : (
+                <span>Descargas VIP según Membresía</span>
+              )}
+              <span>
+                Nivel {maxLvl?.levelNumber ?? 100} (${(maxLvl?.minSpentUsd ?? 4900).toLocaleString("en-US")}+)
+              </span>
             </div>
+            {nextLvl && (
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Siguiente rango: <strong className="text-slate-300">Nivel {nextLvl.levelNumber} ({nextLvl.title})</strong> a partir de <strong>${nextLvl.minSpentUsd.toLocaleString("en-US")} USD</strong> acumulados.
+              </p>
+            )}
           </div>
         )}
       </div>
