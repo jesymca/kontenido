@@ -43,15 +43,27 @@ export default function RegistroPage() {
         return;
       }
 
+      // Iniciar sesión automáticamente tras el registro
+      const email = formData.get("email") as string;
+      const password = formData.get("password") as string;
+
       setSuccess(
         selectedRole === "CREATOR"
-          ? "¡Cuenta de creadora creada! Redirigiendo a verificación de identidad (KYC)..."
-          : "¡Bienvenido a KONTENIDO! Redirigiendo a tu cuenta..."
+          ? "¡Cuenta de creadora creada con éxito! Entrando a tu Estudio..."
+          : "¡Bienvenido a KONTENIDO! Entrando a tu cuenta..."
       );
 
-      setTimeout(() => {
-        router.push(selectedRole === "CREATOR" ? "/panel/kyc" : "/login");
-      }, 1500);
+      const loginRes = await signIn("credentials", {
+        identifier: email,
+        password,
+        redirect: false,
+      });
+
+      if (!loginRes?.error) {
+        window.location.href = selectedRole === "CREATOR" ? "/panel" : "/cuenta";
+      } else {
+        window.location.href = "/login";
+      }
     } catch (err: any) {
       setError("Ocurrió un error inesperado al procesar el registro.");
       setLoading(false);
@@ -127,8 +139,11 @@ export default function RegistroPage() {
         {/* 2. Botón de inicio rápido con Google */}
         <button
           type="button"
-          onClick={() => signIn("google", { callbackUrl: "/" })}
-          className="w-full flex items-center justify-center gap-3 bg-white text-slate-900 hover:bg-slate-100 font-semibold py-3 px-4 rounded-xl transition text-sm mb-6 shadow-sm"
+          onClick={() => {
+            document.cookie = `intended_role=${selectedRole}; path=/; max-age=300; SameSite=Lax`;
+            signIn("google", { callbackUrl: selectedRole === "CREATOR" ? "/panel" : "/cuenta" });
+          }}
+          className="w-full flex items-center justify-center gap-3 bg-white text-slate-900 hover:bg-slate-100 font-semibold py-3 px-4 rounded-xl transition text-sm mb-6 shadow-sm cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path

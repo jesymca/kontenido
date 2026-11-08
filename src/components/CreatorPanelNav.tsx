@@ -77,10 +77,10 @@ export default function CreatorPanelNav({ username, kycStatus }: Props) {
   ];
 
   return (
-    <div className="w-full bg-slate-900/90 border-b border-slate-800 backdrop-blur-md sticky top-16 z-30 mb-8">
+    <div className="w-full bg-slate-900/95 border-b border-slate-800 backdrop-blur-md sticky top-16 z-30 mb-8 shadow-lg shadow-black/20">
       <div className="container mx-auto px-4 max-w-6xl">
-        <div className="flex items-center justify-between gap-4 overflow-x-auto py-2.5 scrollbar-none">
-          <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center justify-between gap-3 overflow-x-auto py-3 scrollbar-none">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = item.exact

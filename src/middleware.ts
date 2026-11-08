@@ -48,6 +48,8 @@ export default auth((req) => {
       if (!user) {
         return NextResponse.redirect(new URL(`/login?callbackUrl=${encodeURIComponent(pathname)}`, nextUrl));
       }
+      // Nota: Si el usuario es Creador o Super Admin, tiene acceso completo.
+      // Si el rol en sesión aún no se ha refrescado a CREATOR (o es CONSUMER), se envía a /cuenta con aviso
       if (user.role !== "CREATOR" && user.role !== "SUPER_ADMIN") {
         return NextResponse.redirect(new URL("/cuenta", nextUrl));
       }

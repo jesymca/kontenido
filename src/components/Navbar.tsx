@@ -103,13 +103,25 @@ export default async function Navbar() {
               )}
 
               {user.role === "CREATOR" && (
-                <Link
-                  href="/panel"
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition shadow-sm shadow-rose-600/30"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Mi Estudio</span>
-                </Link>
+                <>
+                  <Link
+                    href="/panel"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition shadow-sm shadow-rose-600/30"
+                    title="Panel de Estudio para Creadoras"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Mi Estudio</span>
+                  </Link>
+
+                  <Link
+                    href="/panel/pagos"
+                    className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 text-xs font-semibold hover:bg-slate-700 transition border border-amber-500/20"
+                    title="Retiros y cortes en Bolívares"
+                  >
+                    <DollarSign className="w-3.5 h-3.5" />
+                    <span>Retiros (Bs.)</span>
+                  </Link>
+                </>
               )}
 
               {user.role === "AGENCY" && (

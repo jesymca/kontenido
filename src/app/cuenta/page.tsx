@@ -166,81 +166,118 @@ export default async function CuentaPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-        {/* 2. RECARGAR SALDO CON USDT */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center">
-              <Coins className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">Recargar KOIN vía USDT</h2>
-              <p className="text-slate-400 text-xs">
-                Transfiere USDT (Binance) y sube tu comprobante.
-              </p>
-            </div>
-          </div>
-
-          <WalletTopupForm trc20Address={trc20} bep20Address={bep20} />
-        </div>
-
-        {/* 3. TIENDA DE MEMBRESÍAS VIP */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl flex flex-col">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-              <Star className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">Membresías VIP y Badges</h2>
-              <p className="text-slate-400 text-xs">
-                Destaca con frases especiales y habilita descargas autorizadas.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3 flex-1 overflow-y-auto max-h-[460px] pr-1">
-            {memberships.map((vip) => (
-              <div
-                key={vip.id}
-                className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between gap-3 hover:border-slate-700 transition"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white">{vip.name}</span>
-                    <span
-                      className={cn(
-                        "vip-badge-base text-[10px] px-2.5 py-0.5",
-                        getVipBadgeClass(vip.badgeText, vip.badgeColor)
-                      )}
-                    >
-                      {vip.badgeText}
-                    </span>
-                    {vip.allowDownload === 1 && (
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5">
-                        <Download className="w-3 h-3" /> Descarga
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1 leading-snug">
-                    {vip.description || "Beneficios exclusivos en KONTENIDO."}
-                  </p>
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <span className="text-xs font-bold text-amber-400 block mb-1">
-                    {vip.priceKoin} KOIN
-                  </span>
-                  <BuyVipButton
-                    membershipId={vip.id}
-                    priceKoin={vip.priceKoin}
-                    isCurrent={user?.vipMembershipId === vip.id}
-                  />
-                </div>
+      {/* SECCIÓN EXCLUSIVA DE CONSUMIDORES: RECARGAS USDT Y MEMBRESÍAS VIP */}
+      {user?.role !== "CREATOR" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+          {/* 2. RECARGAR SALDO CON USDT */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center">
+                <Coins className="w-5 h-5" />
               </div>
-            ))}
+              <div>
+                <h2 className="text-lg font-bold text-white tracking-tight">Recargar KOIN vía USDT</h2>
+                <p className="text-slate-400 text-xs">
+                  Transfiere USDT (Binance) y sube tu comprobante.
+                </p>
+              </div>
+            </div>
+
+            <WalletTopupForm trc20Address={trc20} bep20Address={bep20} />
+          </div>
+
+          {/* 3. TIENDA DE MEMBRESÍAS VIP */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl flex flex-col">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                <Star className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white tracking-tight">Membresías VIP y Badges</h2>
+                <p className="text-slate-400 text-xs">
+                  Destaca con frases especiales y habilita descargas autorizadas.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 flex-1 overflow-y-auto max-h-[460px] pr-1">
+              {memberships.map((vip) => (
+                <div
+                  key={vip.id}
+                  className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between gap-3 hover:border-slate-700 transition"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">{vip.name}</span>
+                      <span
+                        className={cn(
+                          "vip-badge-base text-[10px] px-2.5 py-0.5",
+                          getVipBadgeClass(vip.badgeText, vip.badgeColor)
+                        )}
+                      >
+                        {vip.badgeText}
+                      </span>
+                      {vip.allowDownload === 1 && (
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5">
+                          <Download className="w-3 h-3" /> Descarga
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                      {vip.description || "Beneficios exclusivos en KONTENIDO."}
+                    </p>
+                  </div>
+
+                  <div className="shrink-0 text-right">
+                    <span className="text-xs font-bold text-amber-400 block mb-1">
+                      {vip.priceKoin} KOIN
+                    </span>
+                    <BuyVipButton
+                      membershipId={vip.id}
+                      priceKoin={vip.priceKoin}
+                      isCurrent={user?.vipMembershipId === vip.id}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        /* ACCESO DIRECTO PARA CREADORAS: GESTIÓN DE INGRESOS Y RETIROS */
+        <div className="mb-10 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-amber-400">
+                Centro de Producción de Creadoras
+              </span>
+              <h2 className="text-xl font-black text-white mt-1">
+                ¿Deseas retirar tus fondos o gestionar tu estudio?
+              </h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1 max-w-xl leading-relaxed">
+                Como creadora, las recargas de USDT y compra de membresías VIP corresponden a la vista de los consumidores. Tus herramientas de producción, estadísticas de ventas y retiros en Bolívares están disponibles en tu Estudio y Centro de Pagos.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                href="/panel"
+                className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-rose-600/30 flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                Ir a Mi Estudio
+              </Link>
+              <Link
+                href="/panel/pagos"
+                className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2"
+              >
+                <Coins className="w-4 h-4" />
+                Retiros en Bolívares
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. HISTORIAL DE MOVIMIENTOS */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">

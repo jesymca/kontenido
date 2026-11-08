@@ -43,8 +43,8 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(callbackUrl);
-      router.refresh();
+      // Si no hay callbackUrl explícito, redirigir a la raíz para que el router/layout derive según rol
+      window.location.href = callbackUrl !== "/" ? callbackUrl : "/";
     } catch (err: any) {
       setError("Error al iniciar sesión. Inténtalo de nuevo.");
       setLoading(false);

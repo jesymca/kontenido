@@ -3,6 +3,7 @@ import { authConfig } from "@/auth.config";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { db } from "@/lib/db";
+import { cookies } from "next/headers";
 import { users, profiles, wallets } from "@/lib/db/schema";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -96,6 +97,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const now = new Date().toISOString();
 
         if (!existing) {
+          const cookieStore = await cookies();
+          const intendedRole = cookieStore.get("intended_role")?.value;
+          const assignedRole = intendedRole === "CREATOR" ? "CREATOR" : "CONSUMER";
+
           const baseName = (user.name || email.split("@")[0])
             .toLowerCase()
             .replace(/[^a-z0-9_]/g, "")
@@ -104,13 +109,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const generatedUsername = `${baseName}_${uniqueSuffix}`;
           const newUserId = crypto.randomUUID();
 
-          // Registrar usuario automáticamente con rol CONSUMER por defecto
+          // Registrar usuario automáticamente con el rol seleccionado (CREATOR o CONSUMER)
           await db.insert(users).values({
             id: newUserId,
             username: generatedUsername,
             email,
-            role: "CONSUMER",
-            status: "ACTIVE",
+            role: assignedRole,
+            status: assignedRole === "CREATOR" ? "PENDING" : "ACTIVE",
             kycStatus: "NONE",
             level: 0,
             allowDownload: 0,
@@ -122,8 +127,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           await db.insert(profiles).values({
             userId: newUserId,
             displayName: user.name || generatedUsername,
-            bio: "¡Hola! Estoy usando KONTENIDO.",
-            subscriptionPriceKoin: 0.0,
+            bio: assignedRole === "CREATOR" ? "Creadora de contenido en KONTENIDO." : "¡Hola! Estoy usando KONTENIDO.",
+            subscriptionPriceKoin: assignedRole === "CREATOR" ? 10.0 : 0.0,
             isPublished: 0,
             createdAt: now,
             updatedAt: now,
@@ -139,8 +144,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           user.id = newUserId;
           user.username = generatedUsername;
-          user.role = "CONSUMER";
-          user.status = "ACTIVE";
+          user.role = assignedRole;
+          user.status = assignedRole === "CREATOR" ? "PENDING" : "ACTIVE";
           user.kycStatus = "NONE";
           user.level = 0;
           user.allowDownload = 0;
