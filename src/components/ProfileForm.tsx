@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { updateProfileAction } from "@/actions/creator";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
@@ -15,8 +15,15 @@ import {
   ShieldAlert,
   ArrowRight,
   Upload,
+  Smile,
+  AtSign,
 } from "lucide-react";
 import Link from "next/link";
+
+const QUICK_EMOJIS = [
+  "🔥", "💋", "✨", "👑", "📸", "🌴", "💖", "😍", "😈", "🥂", "💎", "⭐", "🎉", "👀",
+  "🌹", "💄", "💃", "🎀", "🍒", "🍑", "🍾", "💘", "🥰", "👸", "👙", "👠", "💸", "🦄"
+];
 
 interface Profile {
   displayName: string;
@@ -41,6 +48,23 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
   const [displayNameState, setDisplayNameState] = useState(profile?.displayName || username);
   const [activeUsername, setActiveUsername] = useState(username);
   const [isUsernameValid, setIsUsernameValid] = useState(true);
+  const [bioState, setBioState] = useState(profile?.bio || "");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleInsertEmoji = (emoji: string) => {
+    setBioState((prev) => prev + emoji);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
+  const handleInsertMention = () => {
+    setBioState((prev) => prev + " @");
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
 
   // Estados de imágenes
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -260,17 +284,62 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
         </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-          Biografía y Texto de Bienvenida (Con Emojis y menciones)
-        </label>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-semibold text-slate-300">
+            Biografía y Texto de Bienvenida (Con Emojis y menciones)
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="p-1.5 text-slate-400 hover:text-amber-400 rounded-lg hover:bg-slate-800 transition flex items-center gap-1 text-xs font-semibold"
+              title="Insertar Emojis"
+            >
+              <Smile className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">Emojis</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleInsertMention}
+              className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition flex items-center gap-1 text-xs font-semibold"
+              title="Mencionar usuario"
+            >
+              <AtSign className="w-4 h-4 text-rose-400" />
+              <span className="hidden sm:inline">Mencionar</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Selector de Emojis Rápido para Biografía */}
+        {showEmojiPicker && (
+          <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl flex items-center gap-2 flex-wrap animate-in fade-in duration-150">
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => handleInsertEmoji(emoji)}
+                className="text-lg p-1 hover:scale-125 transition-transform"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+
         <textarea
+          ref={textareaRef}
           name="bio"
           rows={3}
-          defaultValue={profile?.bio || ""}
+          value={bioState}
+          onChange={(e) => setBioState(e.target.value)}
           placeholder="¡Hola! Bienvenidos a mi perfil oficial en KONTENIDO 💋 Subo contenido exclusivo todas las semanas ✨"
-          className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:border-rose-500 focus:outline-hidden resize-none"
+          className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:border-rose-500 focus:outline-hidden resize-none leading-relaxed"
         />
+
+        <div className="flex justify-end text-[11px] text-slate-500">
+          {bioState.length} caracteres
+        </div>
       </div>
 
       {/* 3. ESTADO DE VERIFICACIÓN (KYC) */}
