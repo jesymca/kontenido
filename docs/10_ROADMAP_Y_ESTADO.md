@@ -20,6 +20,7 @@
 - [x] Mejora de Badges VIP — Perfeccionamiento de efectos visuales metálicos 3D y luminosos en CRUD de Membresías (DONE - 2026-11-07)
 - [x] Corrección de Relaciones Drizzle ORM en Payouts y Métodos de Pago (DONE - 2026-11-07)
 - [x] F12 — Integración DolarAPI (Tasa Paralelo) + Retiros en Bolívares + Comisiones Escalonadas (10%, 15%, 20%) + Módulo de Suscriptores y Liquidaciones (DONE - 2026-11-08)
+- [x] F13 — Estabilización Dominio de Producción (kontenido.online), NextAuth trustHost, Resiliencia Vercel y Configuración Google OAuth (DONE - 2026-11-08)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -97,6 +98,20 @@
     - El query `db.query.payouts.findMany({ with: { creator: true } })` y `db.query.paymentMethods.findMany({ with: { bank: true } })` fallaba en tiempo de ejecución porque faltaban las definiciones `payoutsRelations`, `paymentMethodsRelations` y `banksRelations` en `src/lib/db/schema.ts`.
     - Se implementaron y validaron todas las relaciones relacionales de Drizzle ORM (`payoutsRelations`, `paymentMethodsRelations`, `banksRelations`, `subscriptionsRelations`, `purchasesRelations`, `walletTransactionsRelations`, `downloadInfractionsRelations`, `kycDocumentsRelations`, `creatorContractsRelations`, `packagesRelations`, `packageItemsRelations`, `agenciesRelations`, `agencyCreatorsRelations`, `moderationFlagsRelations`, `auditLogRelations`).
     - Verificación exitosa en suite de pruebas relacionales y compilación sin errores con `npm run build`.
+
+- **F13 — Estabilización Dominio de Producción, NextAuth trustHost y Google OAuth (DONE - 2026-11-08)**:
+  - **Diagnóstico del error "This page couldn’t load / A server error occurred"**:
+    1. En NextAuth v5 (Auth.js), al recibir solicitudes desde dominios personalizados como `https://www.kontenido.online`, si la opción `trustHost: true` o la variable `AUTH_TRUST_HOST=true` no están definidas en la configuración base consumida por el middleware en el Edge, NextAuth lanza `[auth][error] UntrustedHost: Host must be trusted`.
+    2. En el Edge Runtime de Vercel, una excepción no capturada en el middleware bloquea toda la navegación y muestra la pantalla genérica 500 de Vercel.
+    3. Faltaba manejo de resiliencia (`try/catch`) en las consultas iniciales a Turso en `src/app/page.tsx` y `src/components/Navbar.tsx` para evitar caídas en caso de que las variables de entorno de BD aún no estuviesen sincronizadas en Vercel.
+  - **Soluciones Aplicadas en Código**:
+    - Se agregó `trustHost: true` y `secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET` directamente en `src/auth.config.ts`.
+    - Se protegió `src/middleware.ts` con manejo de errores resiliente para garantizar que fallos inesperados no bloqueen la carga del sitio.
+    - Se añadió protección con valores por defecto en `src/app/page.tsx` para la consulta de creadores destacados y fallback seguro de `displayName`.
+    - Se añadió alerta visible en `src/lib/db/index.ts` ante la ausencia de `TURSO_DATABASE_URL` en producción.
+  - **Configuración Google OAuth y Vercel**:
+    - Documentadas las URIs de redireccionamiento requeridas para la consola de Google: `/api/auth/callback/google`.
+    - Documentadas todas las variables de entorno obligatorias a cargar en el panel de Vercel (Turso, Auth.js, Google, Cloudflare R2).
 
 
 

@@ -15,21 +15,36 @@ export default async function HomePage() {
   const session = await auth();
 
   // Obtener creadores destacados para mostrar en la página de inicio
-  const featuredCreators = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      level: users.level,
-      displayName: profiles.displayName,
-      bio: profiles.bio,
-      avatarKey: profiles.avatarKey,
-      bannerKey: profiles.bannerKey,
-      priceKoin: profiles.subscriptionPriceKoin,
-    })
-    .from(users)
-    .innerJoin(profiles, eq(users.id, profiles.userId))
-    .where(eq(users.role, "CREATOR"))
-    .limit(8);
+  let featuredCreators: Array<{
+    id: string;
+    username: string;
+    level: number;
+    displayName: string | null;
+    bio: string | null;
+    avatarKey: string | null;
+    bannerKey: string | null;
+    priceKoin: number;
+  }> = [];
+
+  try {
+    featuredCreators = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        level: users.level,
+        displayName: profiles.displayName,
+        bio: profiles.bio,
+        avatarKey: profiles.avatarKey,
+        bannerKey: profiles.bannerKey,
+        priceKoin: profiles.subscriptionPriceKoin,
+      })
+      .from(users)
+      .innerJoin(profiles, eq(users.id, profiles.userId))
+      .where(eq(users.role, "CREATOR"))
+      .limit(8);
+  } catch (err) {
+    console.error("Error al consultar creadores destacados en HomePage (verificar TURSO_DATABASE_URL):", err);
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -140,7 +155,7 @@ export default async function HomePage() {
 
                   <div className="p-5 flex-1 flex flex-col -mt-10 relative">
                     <div className="w-16 h-16 rounded-2xl bg-slate-800 border-2 border-slate-900 overflow-hidden flex items-center justify-center text-white font-bold text-xl mb-3 shadow-md">
-                      {creator.displayName[0]?.toUpperCase()}
+                      {(creator.displayName || creator.username)[0]?.toUpperCase() || "K"}
                     </div>
 
                     <UserLevelBadge
@@ -150,7 +165,7 @@ export default async function HomePage() {
                     />
 
                     <h3 className="text-white font-bold text-base mt-1 group-hover:text-rose-400 transition">
-                      {creator.displayName}
+                      {creator.displayName || creator.username}
                     </h3>
 
                     <p className="text-slate-400 text-xs mt-1.5 line-clamp-2 leading-relaxed flex-1">

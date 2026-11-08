@@ -22,19 +22,23 @@ export default async function Navbar() {
   let vipBadgeColor: string | null = null;
 
   if (user) {
-    const userWallet = await db.query.wallets.findFirst({
-      where: eq(wallets.userId, user.id),
-    });
-    balanceKoin = userWallet?.balanceKoin || 0;
-
-    if (user.vipMembershipId) {
-      const membership = await db.query.vipMemberships.findFirst({
-        where: eq(vipMemberships.id, user.vipMembershipId),
+    try {
+      const userWallet = await db.query.wallets.findFirst({
+        where: eq(wallets.userId, user.id),
       });
-      if (membership) {
-        vipBadgeText = membership.badgeText;
-        vipBadgeColor = membership.badgeColor;
+      balanceKoin = userWallet?.balanceKoin || 0;
+
+      if (user.vipMembershipId) {
+        const membership = await db.query.vipMemberships.findFirst({
+          where: eq(vipMemberships.id, user.vipMembershipId),
+        });
+        if (membership) {
+          vipBadgeText = membership.badgeText;
+          vipBadgeColor = membership.badgeColor;
+        }
       }
+    } catch (err) {
+      console.error("Error al consultar billetera/membresía en Navbar:", err);
     }
   }
 

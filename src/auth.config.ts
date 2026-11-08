@@ -6,6 +6,9 @@ import type { NextAuthConfig } from "next-auth";
  * para ser consumida de forma segura por el Middleware de Next.js.
  */
 export const authConfig = {
+  // Confiar en hosts de Vercel y dominios personalizados (ej. www.kontenido.online)
+  trustHost: true,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: "/login",
     error: "/login",
