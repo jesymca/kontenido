@@ -14,6 +14,8 @@ import {
   wallets,
   walletTransactions,
   settings,
+  creatorSubscriptionPlans,
+  messages,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { copyObjectInR2, BUCKETS } from "@/lib/r2";
@@ -435,4 +437,131 @@ export async function requestPayoutAction(formData: FormData) {
     netKoin,
     tasaParalelo,
   };
+}
+
+/**
+ * Guardar o actualizar un Plan de Suscripción de la Creadora (Hasta 3 planes)
+ * Permite configurar precio y duración en días (ej: 30 días, 90 días, 180 días)
+ */
+export async function saveSubscriptionPlanAction(formData: FormData) {
+  const session = await auth();
+  if (!session?.user || (session.user.role !== "CREATOR" && session.user.role !== "SUPER_ADMIN")) {
+    return { error: "No autorizado" };
+  }
+
+  const userId = session.user.id;
+  const planId = (formData.get("planId") as string) || crypto.randomUUID();
+  const name = (formData.get("name") as string)?.trim();
+  const priceRaw = formData.get("priceKoin") as string;
+  const priceKoin = parseFloat(priceRaw);
+  const durationRaw = formData.get("durationDays") as string;
+  const durationDays = parseInt(durationRaw) || 30;
+  const description = (formData.get("description") as string)?.trim();
+  const orderIndex = parseInt((formData.get("orderIndex") as string) || "1");
+
+  if (!name || isNaN(priceKoin) || priceKoin <= 0) {
+    return { error: "El nombre y un precio válido en KOIN son requeridos." };
+  }
+
+  if (durationDays < 1) {
+    return { error: "La duración debe ser de al menos 1 día." };
+  }
+
+  const now = new Date().toISOString();
+
+  await db
+    .insert(creatorSubscriptionPlans)
+    .values({
+      id: planId,
+      creatorId: userId,
+      name,
+      durationDays,
+      priceKoin,
+      description: description || null,
+      orderIndex: Math.min(3, Math.max(1, orderIndex)),
+      isActive: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: creatorSubscriptionPlans.id,
+      set: {
+        name,
+        durationDays,
+        priceKoin,
+        description: description || null,
+        orderIndex: Math.min(3, Math.max(1, orderIndex)),
+        updatedAt: now,
+      },
+    });
+
+  revalidatePath("/panel/suscripciones");
+  revalidatePath("/panel/perfil");
+  revalidatePath(`/${session.user.username}`);
+
+  return { success: true };
+}
+
+/**
+ * Eliminar un Plan de Suscripción
+ */
+export async function deleteSubscriptionPlanAction(planId: string) {
+  const session = await auth();
+  if (!session?.user) return { error: "No autorizado" };
+
+  await db
+    .delete(creatorSubscriptionPlans)
+    .where(
+      and(
+        eq(creatorSubscriptionPlans.id, planId),
+        eq(creatorSubscriptionPlans.creatorId, session.user.id)
+      )
+    );
+
+  revalidatePath("/panel/suscripciones");
+  revalidatePath("/panel/perfil");
+  revalidatePath(`/${session.user.username}`);
+
+  return { success: true };
+}
+
+/**
+ * Enviar mensaje 1 a 1 estilo OnlyFans
+ */
+export async function sendMessageAction(formData: FormData) {
+  const session = await auth();
+  if (!session?.user) return { error: "Debes iniciar sesión para enviar mensajes." };
+
+  const senderId = session.user.id;
+  const receiverId = (formData.get("receiverId") as string)?.trim();
+  const content = (formData.get("content") as string)?.trim();
+  const priceRaw = formData.get("priceKoin") as string;
+  const priceKoin = parseFloat(priceRaw) || 0.0;
+  const mediaKey = (formData.get("mediaKey") as string) || null;
+  const mediaType = (formData.get("mediaType") as "IMAGE" | "VIDEO") || null;
+
+  if (!receiverId || (!content && !mediaKey)) {
+    return { error: "Destinatario y contenido son obligatorios." };
+  }
+
+  const now = new Date().toISOString();
+  const msgId = crypto.randomUUID();
+
+  await db.insert(messages).values({
+    id: msgId,
+    senderId,
+    receiverId,
+    content: content || "Mensaje multimedia",
+    mediaKey,
+    mediaType,
+    priceKoin,
+    isUnlocked: priceKoin > 0 ? 0 : 1, // Si tiene precio > 0 es PPV bloqueado
+    isRead: 0,
+    createdAt: now,
+  });
+
+  revalidatePath("/panel/mensajes");
+  revalidatePath("/mensajes");
+
+  return { success: true, msgId };
 }

@@ -9,6 +9,7 @@ import {
   subscriptions,
   purchases,
   vipMemberships,
+  creatorSubscriptionPlans,
 } from "@/lib/db/schema";
 import { eq, and, desc, gt } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
@@ -23,6 +24,8 @@ import {
   Download,
   AlertTriangle,
   Calendar,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { getPresignedDownloadUrl, BUCKETS } from "@/lib/r2";
 
@@ -123,11 +126,38 @@ export default async function PublicProfilePage({ params }: PageProps) {
   const profile = creator.profile;
   const subscriptionPrice = profile?.subscriptionPriceKoin || 10.0;
 
+  // 6. Obtener los planes de suscripción configurados por la creadora
+  const plans = await db.query.creatorSubscriptionPlans.findMany({
+    where: and(
+      eq(creatorSubscriptionPlans.creatorId, creator.id),
+      eq(creatorSubscriptionPlans.isActive, 1)
+    ),
+    orderBy: [creatorSubscriptionPlans.orderIndex],
+  });
+
+  // URLs de avatar y banner
+  let avatarUrl: string | null = null;
+  let bannerUrl: string | null = null;
+  try {
+    if (profile?.avatarKey) {
+      avatarUrl = await getPresignedDownloadUrl(BUCKETS.MEDIA, profile.avatarKey, 3600);
+    }
+    if (profile?.bannerKey) {
+      bannerUrl = await getPresignedDownloadUrl(BUCKETS.MEDIA, profile.bannerKey, 3600);
+    }
+  } catch (e) {
+    console.error("Error firmando fotos de perfil:", e);
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 pb-20">
       {/* 1. PORTADA / BANNER */}
-      <div className="h-48 sm:h-64 bg-gradient-to-r from-rose-950 via-purple-950 to-slate-900 relative">
-        <div className="absolute inset-0 bg-black/30" />
+      <div className="h-48 sm:h-64 bg-gradient-to-r from-rose-950 via-purple-950 to-slate-900 relative overflow-hidden">
+        {bannerUrl ? (
+          <img src={bannerUrl} alt="Portada" className="w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-black/30" />
+        )}
       </div>
 
       <div className="container mx-auto px-4 max-w-4xl relative -mt-16 sm:-mt-20">
@@ -137,7 +167,11 @@ export default async function PublicProfilePage({ params }: PageProps) {
             <div className="flex items-end gap-4">
               {/* Avatar con marco */}
               <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-slate-800 border-4 border-slate-900 flex items-center justify-center text-white font-black text-3xl shadow-xl overflow-hidden shrink-0">
-                {profile?.displayName?.[0]?.toUpperCase() || creator.username[0].toUpperCase()}
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={creator.username} className="w-full h-full object-cover" />
+                ) : (
+                  profile?.displayName?.[0]?.toUpperCase() || creator.username[0].toUpperCase()
+                )}
               </div>
 
               <div>
@@ -147,6 +181,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
                   vipBadgeText={creatorVipBadge}
                   vipBadgeColor={creatorVipColor}
                   role={creator.role}
+                  kycStatus={creator.kycStatus}
                   showRoleBadge
                 />
                 <h1 className="text-2xl sm:text-3xl font-black text-white mt-1">
@@ -168,6 +203,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
                 creatorId={creator.id}
                 priceKoin={subscriptionPrice}
                 isSubscriber={isSubscriber}
+                plans={plans}
               />
             )}
           </div>
@@ -183,9 +219,19 @@ export default async function PublicProfilePage({ params }: PageProps) {
             <div>
               <strong className="text-amber-400 font-bold">{subscriptionPrice} KOIN</strong> / Mes
             </div>
-            <div className="flex items-center gap-1 text-emerald-400">
-              <ShieldCheck className="w-4 h-4" /> Verificada
-            </div>
+            {creator.kycStatus === "APPROVED" ? (
+              <div className="flex items-center gap-1 text-emerald-400 font-bold">
+                <ShieldCheck className="w-4 h-4" /> Verificada
+              </div>
+            ) : creator.kycStatus === "PENDING" ? (
+              <div className="flex items-center gap-1 text-amber-400 font-semibold" title="Documento de identidad en revisión por la administración">
+                <Clock className="w-4 h-4" /> Verificación en Revisión
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-amber-500 font-medium" title="Esta cuenta aún no ha validado su cédula de identidad">
+                <AlertCircle className="w-4 h-4" /> Falta Verificar
+              </div>
+            )}
           </div>
         </div>
 

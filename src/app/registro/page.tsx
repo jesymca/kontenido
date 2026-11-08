@@ -151,11 +151,15 @@ export default function RegistroPage() {
           Registrarse con Google
         </button>
 
-        <div className="relative flex items-center justify-center mb-6">
-          <div className="border-t border-slate-800 w-full" />
-          <span className="bg-slate-900 px-3 text-xs text-slate-500 uppercase tracking-wider">
-            O con correo electrónico
-          </span>
+        <div className="relative flex items-center justify-center my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-800" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-slate-900 px-4 text-xs font-semibold text-slate-500 tracking-wider">
+              O con correo electrónico
+            </span>
+          </div>
         </div>
 
         {/* Mensajes de error o éxito */}
@@ -177,7 +181,7 @@ export default function RegistroPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Nombre de usuario (Tu enlace será: kontenido.com/tu_usuario)
+              Nombre de usuario (Tu enlace será: kontenido.online/{'{tu_usuario}'})
             </label>
             <div className="relative">
               <span className="absolute left-3.5 top-3 text-slate-500 text-sm">@</span>

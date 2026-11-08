@@ -7,6 +7,7 @@ interface UserLevelBadgeProps {
   vipBadgeText?: string | null;
   vipBadgeColor?: string | null;
   role?: string;
+  kycStatus?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
   className?: string;
   showRoleBadge?: boolean;
 }
@@ -40,6 +41,7 @@ export default function UserLevelBadge({
   vipBadgeText,
   vipBadgeColor,
   role,
+  kycStatus,
   className,
   showRoleBadge = false,
 }: UserLevelBadgeProps) {
@@ -80,9 +82,33 @@ export default function UserLevelBadge({
         </span>
       )}
       {showRoleBadge && role === "CREATOR" && (
-        <span className="text-[10px] bg-pink-600/90 text-white font-bold px-1.5 py-0.2 rounded uppercase">
-          CREADORA
-        </span>
+        <>
+          <span className="text-[10px] bg-pink-600/90 text-white font-bold px-1.5 py-0.2 rounded uppercase">
+            CREADORA
+          </span>
+          {kycStatus === "APPROVED" ? (
+            <span
+              title="Cuenta con identidad verificada"
+              className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5"
+            >
+              ✓ Verificada
+            </span>
+          ) : kycStatus === "PENDING" ? (
+            <span
+              title="Identidad en revisión por administración"
+              className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold px-1.5 py-0.2 rounded flex items-center gap-0.5"
+            >
+              ⏳ En Revisión
+            </span>
+          ) : (
+            <span
+              title="Esta creadora aún no ha completado la validación de su cédula"
+              className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 font-medium px-1.5 py-0.2 rounded flex items-center gap-0.5"
+            >
+              ⚠️ Falta Verificar
+            </span>
+          )}
+        </>
       )}
     </div>
   );

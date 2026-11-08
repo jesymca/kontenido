@@ -352,6 +352,8 @@ export async function reviewKycAction(kycDocId: string, status: "APPROVED" | "RE
 
   revalidatePath("/admin/kyc");
   revalidatePath("/admin/usuarios");
+  revalidatePath("/panel");
+  revalidatePath("/");
   return { success: true };
 }
 

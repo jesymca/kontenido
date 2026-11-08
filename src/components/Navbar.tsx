@@ -68,11 +68,11 @@ export default async function Navbar() {
         <div className="flex items-center gap-3">
           {user ? (
             <>
-              {/* Billetera KOIN */}
+              {/* Billetera KOIN: Para creadoras lleva al Hub de Retiros (/panel/pagos), para consumidores a Billetera/Recargas (/cuenta) */}
               <Link
-                href="/cuenta"
+                href={user.role === "CREATOR" ? "/panel/pagos" : "/cuenta"}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition text-xs font-semibold"
-                title="Tu saldo KOIN disponible"
+                title={user.role === "CREATOR" ? "Tus ganancias y retiros en Bolívares" : "Tu saldo KOIN disponible"}
               >
                 <Coins className="w-4 h-4 text-amber-400 animate-pulse" />
                 <span>{balanceKoin.toFixed(2)} KOIN</span>
@@ -86,6 +86,7 @@ export default async function Navbar() {
                   vipBadgeText={vipBadgeText}
                   vipBadgeColor={vipBadgeColor}
                   role={user.role}
+                  kycStatus={user.kycStatus}
                   showRoleBadge
                 />
               </div>

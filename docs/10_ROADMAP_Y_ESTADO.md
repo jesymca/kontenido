@@ -21,6 +21,7 @@
 - [x] Corrección de Relaciones Drizzle ORM en Payouts y Métodos de Pago (DONE - 2026-11-07)
 - [x] F12 — Integración DolarAPI (Tasa Paralelo) + Retiros en Bolívares + Comisiones Escalonadas (10%, 15%, 20%) + Módulo de Suscriptores y Liquidaciones (DONE - 2026-11-08)
 - [x] F13 — Estabilización Dominio de Producción (kontenido.online), NextAuth trustHost, Resiliencia Vercel y Configuración Google OAuth (DONE - 2026-11-08)
+- [x] F14 — Flujo Integral de Creadora Tipo OnlyFans, KYC con Reconocimiento de Cédula (jesymca), Mensajería y Planes de Suscripción (DONE - 2026-11-08)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -99,7 +100,35 @@
     - Se implementaron y validaron todas las relaciones relacionales de Drizzle ORM (`payoutsRelations`, `paymentMethodsRelations`, `banksRelations`, `subscriptionsRelations`, `purchasesRelations`, `walletTransactionsRelations`, `downloadInfractionsRelations`, `kycDocumentsRelations`, `creatorContractsRelations`, `packagesRelations`, `packageItemsRelations`, `agenciesRelations`, `agencyCreatorsRelations`, `moderationFlagsRelations`, `auditLogRelations`).
     - Verificación exitosa en suite de pruebas relacionales y compilación sin errores con `npm run build`.
 
-- **F13 — Estabilización Dominio de Producción, NextAuth trustHost y Google OAuth (DONE - 2026-11-08)**:
+- **F14 — Flujo Integral de Creadora Tipo OnlyFans, KYC con Reconocimiento de Cédula (jesymca), Mensajería y Planes de Suscripción (DONE - 2026-11-08)**:
+  - **Corrección de URLs y Modales de Registro/Login**:
+    - Se ajustó el enlace del creador a `kontenido.online/{tu_usuario}` en `src/app/registro/page.tsx`.
+    - Se corrigió la alineación del divisor `O con correo electrónico` y `O con tus credenciales` en `/registro` y `/login` para que quede perfectamente centrado en cualquier pantalla.
+  - **Lógica de Estado KYC y Verificación**:
+    - Creadoras recién registradas inician obligatoriamente con estado `FALTA VERIFICAR` (`kycStatus: "NONE"`).
+    - La insignia `✓ Verificada` en el perfil público `/[username]` y badges de usuario solo se muestra cuando el SUPER_ADMIN aprueba el documento en `/admin/kyc`. De lo contrario muestra `⚠️ Falta Verificar` o `⏳ En Revisión`.
+  - **Motor de Reconocimiento de Cédula Venezolana (jesymca)**:
+    - Se implementó `src/lib/cedulaParser.ts` con el algoritmo de extracción por distancia Levenshtein y patrones regex oficiales para cédulas venezolanas (`V-XXXXXXX` / `E-XXXXXXX`).
+    - Validador de fecha de nacimiento (`DD/MM/AAAA`) y cálculo estricto de mayoría de edad ($\ge 18$ años).
+    - Componente interactivo `src/components/CedulaOcrScanner.tsx` con Tesseract.js WebAssembly vía CDN (`jsdelivr`) para mantener bundles ligeros en Vercel, subida encriptada a Cloudflare R2 privado (`kontenido-private`) con frente, reverso y selfie con cédula (prueba de vida), acompañado del aviso legal de confidencialidad y privacidad.
+  - **Separación Estricta de Roles (Creadora vs Consumidor)**:
+    - Las creadoras usan el sistema para producir y retirar ganancias en Bolívares (`/panel/pagos`), sin confusiones con recargas de billetera de consumo.
+    - Se agregó banner informativo de rol en `/cuenta` con acceso directo a Mi Estudio y Retiros.
+    - El balance en Navbar redirige a `/panel/pagos` para creadoras y a `/cuenta` para consumidores.
+  - **Planes de Suscripción Flexibles (Hasta 3 Opciones con Vencimiento Automatizado)**:
+    - Tabla `creator_subscription_plans` en Turso LibSQL con nombre, duración en días (`duration_days`), precio en KOIN y orden.
+    - Gestor de planes en `src/components/CreatorPlansManager.tsx` y vista `/panel/suscripciones` donde la creadora visualiza sus suscriptores activos y días restantes antes de expiración.
+    - Modal interactivo de selección de planes para fanáticos en `SubscribeButton.tsx` y en el perfil público `/[username]`.
+  - **Mensajería Privada 1 a 1 Tipo OnlyFans**:
+    - Tabla `messages` en Turso con soporte para texto, emojis rápidos, adjuntos multimedia en R2 y mensajes de pago (PPV bloqueados).
+    - Sala de chat completa `src/components/CreatorChatRoom.tsx` y ruta `/panel/mensajes` con lista de conversaciones activas, mensajes cronológicos y cotización en KOIN.
+  - **Estudio de Creadora y Checklist de Configuración**:
+    - Subnavegador unificado `src/components/CreatorPanelNav.tsx` con acceso a Mi Estudio, Subir Contenido, Perfil y Portada, Retiros (Bs.), Membresías y Mensajería.
+    - Checklist de progreso interactivo estilo OnlyFans (Avatar, Portada, Bio, KYC, Método de Cobro y Planes de Suscripción) con porcentaje de avance.
+    - Publicador rápido `src/components/SocialPostComposer.tsx` integrado en `/panel` y `/panel/nuevo` con barra de emojis, menciones `@`, preview de fotos/videos y definición de precio PPV.
+  - **Compilación de Producción**:
+    - 29 rutas estáticas y dinámicas compiladas exitosamente con Next.js 16 (Turbopack) y TypeScript sin errores.
+
   - **Diagnóstico del error "This page couldn’t load / A server error occurred"**:
     1. En NextAuth v5 (Auth.js), al recibir solicitudes desde dominios personalizados como `https://www.kontenido.online`, si la opción `trustHost: true` o la variable `AUTH_TRUST_HOST=true` no están definidas en la configuración base consumida por el middleware en el Edge, NextAuth lanza `[auth][error] UntrustedHost: Host must be trusted`.
     2. En el Edge Runtime de Vercel, una excepción no capturada en el middleware bloquea toda la navegación y muestra la pantalla genérica 500 de Vercel.

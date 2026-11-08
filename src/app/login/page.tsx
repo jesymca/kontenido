@@ -99,11 +99,15 @@ export default function LoginPage() {
           Continuar con Google
         </button>
 
-        <div className="relative flex items-center justify-center mb-5">
-          <div className="border-t border-slate-800 w-full" />
-          <span className="bg-slate-900 px-3 text-[11px] text-slate-500 uppercase tracking-wider">
-            O con tus credenciales
-          </span>
+        <div className="relative flex items-center justify-center my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-800" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-slate-900 px-4 text-[11px] font-semibold text-slate-500 tracking-wider">
+              O con tus credenciales
+            </span>
+          </div>
         </div>
 
         {error && (

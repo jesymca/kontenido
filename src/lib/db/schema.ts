@@ -291,6 +291,27 @@ export const purchases = sqliteTable("purchases", {
  * TABLA: subscriptions (Suscripciones mensuales a creadores)
  * ============================================================================
  */
+/**
+ * ============================================================================
+ * TABLA: creator_subscription_plans (Hasta 3 planes de suscripción configurables por creadora)
+ * Permite precios y tiempos de duración diferentes (ej: 30 días, 90 días, 180 días)
+ * ============================================================================
+ */
+export const creatorSubscriptionPlans = sqliteTable("creator_subscription_plans", {
+  id: text("id").primaryKey(),
+  creatorId: text("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // ej: "Pase Mensual (30 días)", "Pase Trimestral (90 días)"
+  durationDays: integer("duration_days").notNull().default(30), // Duración exacta en días tras la cual vence
+  priceKoin: real("price_koin").notNull(), // Precio en KOIN
+  description: text("description"),
+  orderIndex: integer("order_index").notNull().default(1), // 1, 2 o 3
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const subscriptions = sqliteTable("subscriptions", {
   id: text("id").primaryKey(),
   subscriberId: text("subscriber_id")
@@ -299,6 +320,8 @@ export const subscriptions = sqliteTable("subscriptions", {
   creatorId: text("creator_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  planId: text("plan_id").references(() => creatorSubscriptionPlans.id),
+  durationDays: integer("duration_days").notNull().default(30),
   priceKoinSnapshot: real("price_koin_snapshot").notNull(),
   startsAt: text("starts_at").notNull(),
   endsAt: text("ends_at").notNull(),
@@ -306,6 +329,29 @@ export const subscriptions = sqliteTable("subscriptions", {
   status: text("status", { enum: ["ACTIVE", "EXPIRED", "CANCELLED"] })
     .notNull()
     .default("ACTIVE"),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: messages (Mensajería privada 1 a 1 estilo OnlyFans)
+ * Permite texto, emojis, imágenes y mensajes de pago (PPV desbloqueable)
+ * ============================================================================
+ */
+export const messages = sqliteTable("messages", {
+  id: text("id").primaryKey(),
+  senderId: text("sender_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  receiverId: text("receiver_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  mediaKey: text("media_key"), // Imagen o video adjunto en R2
+  mediaType: text("media_type", { enum: ["IMAGE", "VIDEO"] }),
+  priceKoin: real("price_koin").notNull().default(0.0), // 0 si es libre, >0 si es PPV bloqueado
+  isUnlocked: integer("is_unlocked").notNull().default(1), // 1 libre o comprado, 0 bloqueado
+  isRead: integer("is_read").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
 
@@ -517,6 +563,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   contracts: many(creatorContracts),
   agenciesOwned: many(agencies),
   agencyMemberships: many(agencyCreators),
+  subscriptionPlans: many(creatorSubscriptionPlans),
+  messagesSent: many(messages, { relationName: "sender" }),
+  messagesReceived: many(messages, { relationName: "receiver" }),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -594,6 +643,34 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
     fields: [subscriptions.creatorId],
     references: [users.id],
     relationName: "creator",
+  }),
+  plan: one(creatorSubscriptionPlans, {
+    fields: [subscriptions.planId],
+    references: [creatorSubscriptionPlans.id],
+  }),
+}));
+
+export const creatorSubscriptionPlansRelations = relations(
+  creatorSubscriptionPlans,
+  ({ one, many }) => ({
+    creator: one(users, {
+      fields: [creatorSubscriptionPlans.creatorId],
+      references: [users.id],
+    }),
+    subscriptions: many(subscriptions),
+  })
+);
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
+    relationName: "sender",
+  }),
+  receiver: one(users, {
+    fields: [messages.receiverId],
+    references: [users.id],
+    relationName: "receiver",
   }),
 }));
 

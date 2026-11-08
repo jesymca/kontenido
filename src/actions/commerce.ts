@@ -11,15 +11,16 @@ import {
   posts,
   users,
   auditLog,
+  creatorSubscriptionPlans,
 } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 /**
- * Suscribirse mensualmente al perfil de una creadora
- * Debita el saldo en KOIN de la billetera del consumidor y activa la suscripción por 30 días.
+ * Suscribirse a un perfil de creadora (admite plan específico con duración configurable)
+ * Debita el saldo en KOIN de la billetera del consumidor y activa la suscripción por los días del plan.
  */
-export async function subscribeToCreatorAction(creatorId: string) {
+export async function subscribeToCreatorAction(creatorId: string, planId?: string) {
   const session = await auth();
   if (!session?.user) {
     return { error: "Debes iniciar sesión para suscribirte." };
@@ -30,18 +31,35 @@ export async function subscribeToCreatorAction(creatorId: string) {
     return { error: "No puedes suscribirte a tu propio perfil." };
   }
 
-  // Obtener precio de suscripción del perfil
-  const creatorProfile = await db.query.profiles.findFirst({
-    where: eq(profiles.userId, creatorId),
-  });
+  // 1. Obtener datos del plan de suscripción o perfil base
+  let priceKoin = 10.0;
+  let durationDays = 30;
+  let planName = "Suscripción 30 días";
 
-  if (!creatorProfile) {
-    return { error: "Perfil de creadora no encontrado." };
+  if (planId) {
+    const plan = await db.query.creatorSubscriptionPlans.findFirst({
+      where: and(
+        eq(creatorSubscriptionPlans.id, planId),
+        eq(creatorSubscriptionPlans.creatorId, creatorId),
+        eq(creatorSubscriptionPlans.isActive, 1)
+      ),
+    });
+    if (plan) {
+      priceKoin = plan.priceKoin;
+      durationDays = plan.durationDays;
+      planName = plan.name;
+    }
+  } else {
+    const creatorProfile = await db.query.profiles.findFirst({
+      where: eq(profiles.userId, creatorId),
+    });
+    if (!creatorProfile) {
+      return { error: "Perfil de creadora no encontrado." };
+    }
+    priceKoin = creatorProfile.subscriptionPriceKoin || 10.0;
   }
 
-  const priceKoin = creatorProfile.subscriptionPriceKoin || 10.0;
-
-  // Obtener billetera del consumidor
+  // 2. Obtener billetera del consumidor
   const buyerWallet = await db.query.wallets.findFirst({
     where: eq(wallets.userId, subscriberId),
   });
@@ -55,10 +73,11 @@ export async function subscribeToCreatorAction(creatorId: string) {
 
   const now = new Date();
   const startsAt = now.toISOString();
-  const endsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  // Vencimiento exacto según la duración configurada en días por la creadora
+  const endsAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString();
   const subId = crypto.randomUUID();
 
-  // 1. Debitar saldo del consumidor
+  // 3. Debitar saldo del consumidor
   await db
     .update(wallets)
     .set({
@@ -67,7 +86,7 @@ export async function subscribeToCreatorAction(creatorId: string) {
     })
     .where(eq(wallets.userId, subscriberId));
 
-  // 2. Acreditar ganancias a la creadora
+  // 4. Acreditar ganancias a la creadora
   await db
     .update(wallets)
     .set({
@@ -76,11 +95,13 @@ export async function subscribeToCreatorAction(creatorId: string) {
     })
     .where(eq(wallets.userId, creatorId));
 
-  // 3. Registrar o renovar suscripción
+  // 5. Registrar suscripción con su plan y vencimiento
   await db.insert(subscriptions).values({
     id: subId,
     subscriberId,
     creatorId,
+    planId: planId || null,
+    durationDays,
     priceKoinSnapshot: priceKoin,
     startsAt,
     endsAt,
@@ -89,7 +110,7 @@ export async function subscribeToCreatorAction(creatorId: string) {
     createdAt: startsAt,
   });
 
-  // 4. Registrar transacción
+  // 6. Registrar transacción
   await db.insert(walletTransactions).values({
     id: crypto.randomUUID(),
     userId: subscriberId,
@@ -97,13 +118,13 @@ export async function subscribeToCreatorAction(creatorId: string) {
     amountKoin: priceKoin,
     reference: `SUB_${creatorId.slice(0, 8)}`,
     status: "CONFIRMED",
-    notes: `Suscripción mensual a creador ${creatorId}`,
+    notes: `${planName} (${durationDays} días) a creadora ${creatorId}`,
     createdAt: startsAt,
     confirmedAt: startsAt,
   });
 
   revalidatePath(`/${session.user.username}`);
-  return { success: true };
+  return { success: true, durationDays, endsAt };
 }
 
 /**

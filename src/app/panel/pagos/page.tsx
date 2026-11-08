@@ -4,6 +4,7 @@ import { banks, paymentMethods, wallets, settings, payouts, subscriptions, users
 import { eq, desc } from "drizzle-orm";
 import PaymentMethodsManager from "@/components/PaymentMethodsManager";
 import CreatorWithdrawalHub from "@/components/CreatorWithdrawalHub";
+import CreatorPanelNav from "@/components/CreatorPanelNav";
 import { getDolarRates } from "@/lib/dolarapi";
 import { getCreatorCommissionTier } from "@/lib/commissions";
 import { Wallet, Landmark, DollarSign } from "lucide-react";
@@ -17,6 +18,11 @@ export default async function PagosPage() {
   if (!session?.user) return null;
 
   const userId = session.user.id;
+
+  // 0. Obtener usuario actual para estatus KYC
+  const currentUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+  });
 
   // 1. Obtener billetera de la creadora
   const wallet = await db.query.wallets.findFirst({
@@ -95,8 +101,14 @@ export default async function PagosPage() {
   });
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl space-y-10">
-      {/* Cabecera Principal */}
+    <div>
+      <CreatorPanelNav
+        username={session.user.username}
+        kycStatus={currentUser?.kycStatus || "NONE"}
+      />
+
+      <div className="container mx-auto px-4 pb-12 max-w-5xl space-y-10">
+        {/* Cabecera Principal */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
           <Wallet className="w-7 h-7 text-rose-500" />
@@ -135,5 +147,6 @@ export default async function PagosPage() {
         <PaymentMethodsManager banks={allBanks} existingMethods={userMethods} />
       </div>
     </div>
-  );
+  </div>
+);
 }

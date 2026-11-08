@@ -14,7 +14,8 @@ import UserLevelBadge from "@/components/UserLevelBadge";
 import WalletTopupForm from "@/components/WalletTopupForm";
 import BuyVipButton from "@/components/BuyVipButton";
 import { cn, getVipBadgeClass } from "@/lib/utils";
-import { Coins, Flame, ArrowUpRight, ShieldCheck, Star, Award, History, Download } from "lucide-react";
+import Link from "next/link";
+import { Coins, Flame, ArrowUpRight, ShieldCheck, Star, Award, History, Download, Sparkles } from "lucide-react";
 
 /**
  * Vista de Billetera y Cuenta de Usuario (/cuenta)
@@ -65,6 +66,43 @@ export default async function CuentaPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
+      {/* Aviso especial si el usuario tiene rol de Creadora */}
+      {user?.role === "CREATOR" && (
+        <div className="mb-8 p-5 bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+              <Sparkles className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <span className="px-2 py-0.5 bg-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-wider rounded-md border border-rose-500/30">
+                Rol Creadora de Contenido
+              </span>
+              <h3 className="text-white font-black text-sm mt-1">
+                ¿Deseas gestionar tus ganancias, publicaciones y retiros en Bolívares?
+              </h3>
+              <p className="text-rose-200/80 text-xs mt-0.5 max-w-xl leading-relaxed">
+                Esta sección es la Billetera de Consumo para recargar y suscribirte como fan. Tus herramientas de producción, estadísticas de ventas y cobros semanales están en tu Estudio de Creadora.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/panel"
+              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-rose-600/30"
+            >
+              Ir a Mi Estudio
+            </Link>
+            <Link
+              href="/panel/pagos"
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-xl transition border border-amber-500/30"
+            >
+              Retiros de Dinero
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* 1. CABECERA CON SALDO Y NIVEL */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl mb-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
