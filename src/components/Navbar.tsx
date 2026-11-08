@@ -1,36 +1,63 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import UserLevelBadge from "./UserLevelBadge";
+import CreatorPanelNav from "./CreatorPanelNav";
 import { Coins, Shield, Sparkles, LayoutDashboard, LogOut, User, DollarSign } from "lucide-react";
 import { db } from "@/lib/db";
-import { wallets, vipMemberships } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { wallets, vipMemberships, users } from "@/lib/db/schema";
+import { eq, or } from "drizzle-orm";
 import Image from "next/image";
 
 /**
  * Barra de navegación principal de KONTENIDO
  * Muestra saldo KOIN en tiempo real, nivel de usuario con marco [Lv. X],
- * distintivo VIP y accesos directos según el rol de la sesión.
+ * distintivo VIP y despliega el menú completo del Estudio de Creadora cuando el usuario es CREATOR.
  */
 export default async function Navbar() {
   const session = await auth();
-  const user = session?.user;
+  const sessionUser = session?.user;
 
-  // Obtener saldo de billetera si está autenticado
+  // Obtener usuario sincronizado desde Turso DB, saldo de billetera y membresía VIP
   let balanceKoin = 0;
   let vipBadgeText: string | null = null;
   let vipBadgeColor: string | null = null;
 
-  if (user) {
+  let effectiveRole = sessionUser?.role;
+  let effectiveUsername = sessionUser?.username || "";
+  let effectiveKycStatus = sessionUser?.kycStatus || "NONE";
+  let effectiveLevel = sessionUser?.level || 0;
+
+  if (sessionUser) {
     try {
+      const dbUser = sessionUser.email
+        ? await db.query.users.findFirst({
+            where: sessionUser.id
+              ? or(eq(users.id, sessionUser.id), eq(users.email, sessionUser.email.toLowerCase().trim()))
+              : eq(users.email, sessionUser.email.toLowerCase().trim()),
+          })
+        : sessionUser.id
+        ? await db.query.users.findFirst({
+            where: eq(users.id, sessionUser.id),
+          })
+        : null;
+
+      const targetUserId = dbUser?.id || sessionUser.id;
+      if (dbUser) {
+        effectiveRole = dbUser.role;
+        effectiveUsername = dbUser.username;
+        effectiveKycStatus = dbUser.kycStatus;
+        effectiveLevel = dbUser.level;
+      }
+
       const userWallet = await db.query.wallets.findFirst({
-        where: eq(wallets.userId, user.id),
+        where: eq(wallets.userId, targetUserId),
       });
       balanceKoin = userWallet?.balanceKoin || 0;
 
-      if (user.vipMembershipId) {
+      const vipId = dbUser?.vipMembershipId ?? sessionUser.vipMembershipId;
+      if (vipId) {
         const membership = await db.query.vipMemberships.findFirst({
-          where: eq(vipMemberships.id, user.vipMembershipId),
+          where: eq(vipMemberships.id, vipId),
         });
         if (membership) {
           vipBadgeText = membership.badgeText;
@@ -38,12 +65,12 @@ export default async function Navbar() {
         }
       }
     } catch (err) {
-      console.error("Error al consultar billetera/membresía en Navbar:", err);
+      console.error("Error al consultar usuario/billetera en Navbar:", err);
     }
   }
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logotipo KONTENIDO */}
         <Link href="/" className="flex items-center gap-2.5 group">
@@ -65,14 +92,18 @@ export default async function Navbar() {
         </Link>
 
         {/* Acciones derechas */}
-        <div className="flex items-center gap-3">
-          {user ? (
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {sessionUser ? (
             <>
               {/* Billetera KOIN: Para creadoras lleva al Hub de Retiros (/panel/pagos), para consumidores a Billetera/Recargas (/cuenta) */}
               <Link
-                href={user.role === "CREATOR" ? "/panel/pagos" : "/cuenta"}
+                href={effectiveRole === "CREATOR" ? "/panel/pagos" : "/cuenta"}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition text-xs font-semibold"
-                title={user.role === "CREATOR" ? "Tus ganancias y retiros en Bolívares" : "Tu saldo KOIN disponible"}
+                title={
+                  effectiveRole === "CREATOR"
+                    ? "Tus ganancias y retiros en Bolívares"
+                    : "Tu saldo KOIN disponible"
+                }
               >
                 <Coins className="w-4 h-4 text-amber-400 animate-pulse" />
                 <span>{balanceKoin.toFixed(2)} KOIN</span>
@@ -81,18 +112,18 @@ export default async function Navbar() {
               {/* Badge de nivel con marco y distintivo VIP */}
               <div className="hidden sm:flex items-center">
                 <UserLevelBadge
-                  level={user.level || 0}
-                  username={user.username}
+                  level={effectiveLevel}
+                  username={effectiveUsername}
                   vipBadgeText={vipBadgeText}
                   vipBadgeColor={vipBadgeColor}
-                  role={user.role}
-                  kycStatus={user.kycStatus}
+                  role={effectiveRole}
+                  kycStatus={effectiveKycStatus}
                   showRoleBadge
                 />
               </div>
 
               {/* Botones de navegación según rol */}
-              {user.role === "SUPER_ADMIN" && (
+              {effectiveRole === "SUPER_ADMIN" && (
                 <Link
                   href="/admin"
                   className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition shadow-sm"
@@ -102,7 +133,7 @@ export default async function Navbar() {
                 </Link>
               )}
 
-              {user.role === "CREATOR" && (
+              {effectiveRole === "CREATOR" && (
                 <>
                   <Link
                     href="/panel"
@@ -124,7 +155,7 @@ export default async function Navbar() {
                 </>
               )}
 
-              {user.role === "AGENCY" && (
+              {effectiveRole === "AGENCY" && (
                 <Link
                   href="/agencia"
                   className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition"
@@ -136,7 +167,7 @@ export default async function Navbar() {
 
               {/* Perfil del usuario */}
               <Link
-                href={`/${user.username}`}
+                href={`/${effectiveUsername}`}
                 className="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition"
                 title="Ver mi perfil público"
               >
@@ -152,7 +183,7 @@ export default async function Navbar() {
               >
                 <button
                   type="submit"
-                  className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition"
+                  className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
                   title="Cerrar sesión"
                 >
                   <LogOut className="w-4 h-4" />
@@ -177,6 +208,15 @@ export default async function Navbar() {
           )}
         </div>
       </div>
+
+      {/* Menú desplegado permanente para Creadoras de Contenido en toda la plataforma */}
+      {sessionUser && effectiveRole === "CREATOR" && (
+        <CreatorPanelNav
+          username={effectiveUsername}
+          kycStatus={effectiveKycStatus}
+          inHeader
+        />
+      )}
     </header>
   );
 }

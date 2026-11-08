@@ -128,6 +128,12 @@
     - Publicador rápido `src/components/SocialPostComposer.tsx` integrado en `/panel` y `/panel/nuevo` con barra de emojis, menciones `@`, preview de fotos/videos y definición de precio PPV.
   - **Compilación de Producción**:
     - 29 rutas estáticas y dinámicas compiladas exitosamente con Next.js 16 (Turbopack) y TypeScript sin errores.
+  - **Corrección Definitiva de Acceso a `/panel`, Sincronización JWT/DB y Menú Desplegado Global**:
+    - Se eliminó en `src/middleware.ts` la redirección forzada de `/panel` hacia `/cuenta` que ocurría cuando la cookie JWT en el navegador conservaba un rol anterior (`CONSUMER`) previo a la actualización en Turso DB.
+    - Se creó `src/app/panel/layout.tsx` para validar el rol directamente contra Turso DB en tiempo real y ofrecer activación en 1 clic a Creadora si una cuenta entró como Consumidor.
+    - Se actualizaron los callbacks `jwt` y `session` en `src/auth.ts` para sincronizar en cada render el `id`, `username`, `role`, `kycStatus` y `level` desde Turso DB.
+    - Se integró `CreatorPanelNav` de forma permanente dentro del `<header>` global en `src/components/Navbar.tsx` cuando el usuario es `CREATOR`, mostrando todo su menú de herramientas desplegado en cualquier página.
+    - Se corrigió el botón *"Quiero Crear Contenido"* en `src/app/page.tsx` para que apunte siempre a `/panel` cuando hay sesión activa (en lugar de `/cuenta`).
 
   - **Diagnóstico del error "This page couldn’t load / A server error occurred"**:
     1. En NextAuth v5 (Auth.js), al recibir solicitudes desde dominios personalizados como `https://www.kontenido.online`, si la opción `trustHost: true` o la variable `AUTH_TRUST_HOST=true` no están definidas en la configuración base consumida por el middleware en el Edge, NextAuth lanza `[auth][error] UntrustedHost: Host must be trusted`.

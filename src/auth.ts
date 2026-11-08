@@ -94,13 +94,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: eq(users.email, email),
         });
 
+        const cookieStore = await cookies();
+        const intendedRoleCookie = cookieStore.get("intended_role")?.value;
+        const callbackUrlCookie =
+          cookieStore.get("__Secure-authjs.callback-url")?.value ||
+          cookieStore.get("authjs.callback-url")?.value ||
+          cookieStore.get("__Secure-next-auth.callback-url")?.value ||
+          cookieStore.get("next-auth.callback-url")?.value ||
+          "";
+
+        const wantsCreator =
+          intendedRoleCookie === "CREATOR" || callbackUrlCookie.includes("/panel");
+        const assignedRole = wantsCreator ? "CREATOR" : "CONSUMER";
+
         const now = new Date().toISOString();
 
         if (!existing) {
-          const cookieStore = await cookies();
-          const intendedRole = cookieStore.get("intended_role")?.value;
-          const assignedRole = intendedRole === "CREATOR" ? "CREATOR" : "CONSUMER";
-
           const baseName = (user.name || email.split("@")[0])
             .toLowerCase()
             .replace(/[^a-z0-9_]/g, "")
@@ -150,9 +159,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.level = 0;
           user.allowDownload = 0;
         } else {
+          // Si ya existía como CONSUMER pero eligió registrarse como CREATOR, actualizar rol a CREATOR
+          let currentRole = existing.role;
+          if (wantsCreator && existing.role === "CONSUMER") {
+            currentRole = "CREATOR";
+            await db
+              .update(users)
+              .set({ role: "CREATOR", updatedAt: now })
+              .where(eq(users.id, existing.id));
+          }
+
           user.id = existing.id;
           user.username = existing.username;
-          user.role = existing.role;
+          user.role = currentRole;
           user.status = existing.status;
           user.kycStatus = existing.kycStatus;
           user.level = existing.level;
@@ -162,6 +181,80 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
       return true;
+    },
+
+    // Sincronización en tiempo real del JWT con la base de datos Turso
+    async jwt({ token, user, trigger, session }) {
+      if (user) {
+        token.id = user.id;
+        token.username = user.username;
+        token.role = user.role;
+        token.status = user.status;
+        token.kycStatus = user.kycStatus;
+        token.level = user.level;
+        token.vipMembershipId = user.vipMembershipId;
+        token.allowDownload = user.allowDownload;
+        token.suspensionReason = user.suspensionReason;
+      }
+
+      if (trigger === "update" && session) {
+        token.role = session.role ?? token.role;
+        token.status = session.status ?? token.status;
+        token.kycStatus = session.kycStatus ?? token.kycStatus;
+        token.level = session.level ?? token.level;
+        token.vipMembershipId = session.vipMembershipId ?? token.vipMembershipId;
+        token.allowDownload = session.allowDownload ?? token.allowDownload;
+      }
+
+      // Consultar datos frescos del usuario desde Turso DB por email o id para mantener rol y KYC al día
+      try {
+        const emailLookup = typeof token.email === "string" ? token.email.toLowerCase().trim() : null;
+        const idLookup = typeof token.id === "string" ? token.id : null;
+
+        const dbUser = emailLookup
+          ? await db.query.users.findFirst({
+              where: idLookup
+                ? or(eq(users.id, idLookup), eq(users.email, emailLookup))
+                : eq(users.email, emailLookup),
+            })
+          : idLookup
+          ? await db.query.users.findFirst({
+              where: eq(users.id, idLookup),
+            })
+          : null;
+
+        if (dbUser) {
+          token.id = dbUser.id;
+          token.username = dbUser.username;
+          token.role = dbUser.role;
+          token.status = dbUser.status;
+          token.kycStatus = dbUser.kycStatus;
+          token.level = dbUser.level;
+          token.vipMembershipId = dbUser.vipMembershipId;
+          token.allowDownload = dbUser.allowDownload;
+          token.suspensionReason = dbUser.suspensionReason;
+        }
+      } catch (err) {
+        console.error("Error sincronizando sesión con Turso DB en jwt callback:", err);
+      }
+
+      return token;
+    },
+
+    // Enriquecimiento de la sesión de usuario con los valores sincronizados
+    async session({ session, token }) {
+      if (session.user && token) {
+        session.user.id = token.id as string;
+        session.user.username = token.username as string;
+        session.user.role = token.role as any;
+        session.user.status = token.status as any;
+        session.user.kycStatus = token.kycStatus as any;
+        session.user.level = (token.level as number) || 0;
+        session.user.vipMembershipId = token.vipMembershipId as string | null;
+        session.user.allowDownload = (token.allowDownload as number) || 0;
+        session.user.suspensionReason = token.suspensionReason as string | null;
+      }
+      return session;
     },
   },
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,

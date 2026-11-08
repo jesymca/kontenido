@@ -110,14 +110,19 @@ export default async function CuentaPage() {
             <div className="mb-2">
               <UserLevelBadge
                 level={currentLevelNum}
-                username={session.user.username}
-                role={session.user.role}
+                username={user?.username || session.user.username}
+                role={user?.role || session.user.role}
+                kycStatus={user?.kycStatus}
                 showRoleBadge
               />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white">Mi Billetera KOIN</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-white">
+              {user?.role === "CREATOR" ? "Balance de Creadora KOIN" : "Mi Billetera KOIN"}
+            </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Moneda interna respaldada 1:1 en USDT para suscripciones y compras.
+              {user?.role === "CREATOR"
+                ? "Tus ganancias acumuladas por suscripciones, contenido PPV y propinas."
+                : "Moneda interna respaldada 1:1 en USDT para suscripciones y compras."}
             </p>
           </div>
 
@@ -137,33 +142,35 @@ export default async function CuentaPage() {
           </div>
         </div>
 
-        {/* Barra de progreso de nivel según inversión en USD */}
-        <div className="mt-8 pt-6 border-t border-slate-800/80">
-          <div className="flex items-center justify-between text-xs mb-2">
-            <span className="text-slate-300 font-semibold flex items-center gap-1.5">
-              <Award className="w-4 h-4 text-amber-400" />
-              Nivel de Inversor: {currentLevel?.title || `Nivel ${currentLevelNum}`}
-            </span>
-            <span className="text-slate-400">
-              Inversión acumulada: <strong>${(wallet?.totalSpentUsd || 0).toFixed(2)} USD</strong>
-            </span>
-          </div>
+        {/* Barra de progreso de nivel según inversión en USD (Solo para Consumidores) */}
+        {user?.role !== "CREATOR" && (
+          <div className="mt-8 pt-6 border-t border-slate-800/80">
+            <div className="flex items-center justify-between text-xs mb-2">
+              <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-amber-400" />
+                Nivel de Inversor: {currentLevel?.title || `Nivel ${currentLevelNum}`}
+              </span>
+              <span className="text-slate-400">
+                Inversión acumulada: <strong>${(wallet?.totalSpentUsd || 0).toFixed(2)} USD</strong>
+              </span>
+            </div>
 
-          <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-pink-500 rounded-full transition-all duration-500"
-              style={{
-                width: `${Math.min(100, Math.max(5, (currentLevelNum / 100) * 100))}%`,
-              }}
-            />
-          </div>
+            <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-pink-500 rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(100, Math.max(5, (currentLevelNum / 100) * 100))}%`,
+                }}
+              />
+            </div>
 
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
-            <span>Nivel 0 ($0)</span>
-            <span>Nivel 4 ($101+ Descargas VIP)</span>
-            <span>Nivel 100 ($4,900+)</span>
+            <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+              <span>Nivel 0 ($0)</span>
+              <span>Nivel 4 ($101+ Descargas VIP)</span>
+              <span>Nivel 100 ($4,900+)</span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* SECCIÓN EXCLUSIVA DE CONSUMIDORES: RECARGAS USDT Y MEMBRESÍAS VIP */}

@@ -10,6 +10,7 @@ import {
   Users,
   MessageCircle,
   ShieldCheck,
+  FileCheck,
   Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,14 +18,21 @@ import { cn } from "@/lib/utils";
 interface Props {
   username?: string;
   kycStatus?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+  inHeader?: boolean;
 }
 
 /**
- * Barra de navegación principal del Estudio de Creadora estilo OnlyFans
- * Acceso directo a: Perfil, Subir Contenido, Retiros, Mensajería, Membresías de Clientes y KYC.
+ * Barra de navegación principal desplegada del Estudio de Creadora estilo OnlyFans
+ * Se despliega de forma permanente en la navegación superior para que la creadora
+ * visualice todo su menú de herramientas en cualquier momento.
  */
-export default function CreatorPanelNav({ username, kycStatus }: Props) {
+export default function CreatorPanelNav({ username, kycStatus, inHeader = false }: Props) {
   const pathname = usePathname();
+
+  // Si se invoca desde el interior de una página individual, no duplicar ya que está fijo en el Navbar global
+  if (!inHeader) {
+    return null;
+  }
 
   const navItems = [
     {
@@ -65,22 +73,30 @@ export default function CreatorPanelNav({ username, kycStatus }: Props) {
       icon: ShieldCheck,
       badge:
         kycStatus === "APPROVED"
-          ? "✓"
+          ? "✓ Verificada"
           : kycStatus === "PENDING"
           ? "En Revisión"
           : "Falta Verificar",
       badgeColor:
         kycStatus === "APPROVED"
-          ? "bg-emerald-500/20 text-emerald-400"
-          : "bg-amber-500/20 text-amber-400 animate-pulse",
+          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+          : "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse",
+    },
+    {
+      label: "Contrato Legal",
+      href: "/panel/contrato",
+      icon: FileCheck,
     },
   ];
 
   return (
-    <div className="w-full bg-slate-900/95 border-b border-slate-800 backdrop-blur-md sticky top-16 z-30 mb-8 shadow-lg shadow-black/20">
+    <div className="w-full bg-slate-900/95 border-t border-slate-800/90 backdrop-blur-md shadow-lg shadow-black/30">
       <div className="container mx-auto px-4 max-w-6xl">
-        <div className="flex items-center justify-between gap-3 overflow-x-auto py-3 scrollbar-none">
+        <div className="flex items-center justify-between gap-3 overflow-x-auto py-2.5 scrollbar-none">
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <span className="hidden xl:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-lg mr-1">
+              Menú Creadora
+            </span>
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = item.exact
@@ -94,10 +110,10 @@ export default function CreatorPanelNav({ username, kycStatus }: Props) {
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all select-none",
                     item.highlight && !isActive
-                      ? "bg-rose-600/10 text-rose-400 border border-rose-500/30 hover:bg-rose-600 hover:text-white"
+                      ? "bg-rose-600/15 text-rose-400 border border-rose-500/30 hover:bg-rose-600 hover:text-white"
                       : isActive
-                      ? "bg-rose-600 text-white shadow-md shadow-rose-600/20 font-bold"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800"
+                      ? "bg-rose-600 text-white shadow-md shadow-rose-600/25 font-bold"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800"
                   )}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
@@ -105,7 +121,7 @@ export default function CreatorPanelNav({ username, kycStatus }: Props) {
                   {item.badge && (
                     <span
                       className={cn(
-                        "text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1",
+                        "text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1",
                         item.badgeColor
                       )}
                     >
@@ -120,12 +136,11 @@ export default function CreatorPanelNav({ username, kycStatus }: Props) {
           {username && (
             <Link
               href={`/${username}`}
-              target="_blank"
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold shrink-0 transition"
-              title="Abrir tu perfil público en una nueva pestaña"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold shrink-0 transition border border-slate-700"
+              title="Ver cómo luce tu perfil público"
             >
               <Eye className="w-3.5 h-3.5 text-rose-400" />
-              <span>Ver mi Perfil Público</span>
+              <span>Mi Perfil Público</span>
             </Link>
           )}
         </div>

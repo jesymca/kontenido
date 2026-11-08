@@ -44,14 +44,10 @@ export default auth((req) => {
     }
 
     // 3. Proteger rutas de Creador (/panel/*)
+    // La verificación de sesión activa se hace aquí en Edge; la verificación de rol en tiempo real contra Turso DB se realiza en /panel/layout.tsx
     if (pathname.startsWith("/panel")) {
       if (!user) {
         return NextResponse.redirect(new URL(`/login?callbackUrl=${encodeURIComponent(pathname)}`, nextUrl));
-      }
-      // Nota: Si el usuario es Creador o Super Admin, tiene acceso completo.
-      // Si el rol en sesión aún no se ha refrescado a CREATOR (o es CONSUMER), se envía a /cuenta con aviso
-      if (user.role !== "CREATOR" && user.role !== "SUPER_ADMIN") {
-        return NextResponse.redirect(new URL("/cuenta", nextUrl));
       }
     }
 

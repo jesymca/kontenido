@@ -82,12 +82,12 @@ export default async function HomePage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href={session ? (session.user.role === "CREATOR" ? "/panel" : "/cuenta") : "/registro"}
+              href={session ? "/panel" : "/registro"}
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-base transition shadow-xl shadow-rose-600/30 hover:scale-105"
             >
               <Sparkles className="w-5 h-5" />
               {session?.user.role === "CREATOR"
-                ? "Ir a mi Estudio"
+                ? "Ir a mi Estudio (/panel)"
                 : "Quiero Crear Contenido"}
             </Link>
 
