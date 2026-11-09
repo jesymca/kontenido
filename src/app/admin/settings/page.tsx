@@ -231,6 +231,23 @@ export default async function AdminSettingsPage() {
           </div>
 
           <div>
+            <label className="block text-xs font-semibold text-amber-400 mb-1.5 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              ID de Binance / Binance Pay ID para Recargas
+            </label>
+            <input
+              name="binance_pay_id"
+              type="text"
+              defaultValue={getVal("binance_pay_id", "")}
+              placeholder="ej: 123456789 (Binance Pay ID o Correo Binance)"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm font-mono focus:border-rose-500 focus:outline-hidden"
+            />
+            <span className="text-[11px] text-slate-500 mt-1 block">
+              Permite a los usuarios enviar USDT directamente por ID de Binance sin comisiones de red adicionales.
+            </span>
+          </div>
+
+          <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               Inversión Mínima ($) para Habilitar Descargas VIP
             </label>

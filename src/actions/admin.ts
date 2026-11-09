@@ -398,6 +398,7 @@ export async function updatePlatformSettingsAction(formData: FormData) {
   const parity = formData.get("koin_usd_parity") as string;
   const trc20 = formData.get("usdt_trc20_address") as string;
   const bep20 = formData.get("usdt_bep20_address") as string;
+  const binancePayId = formData.get("binance_pay_id") as string;
   const vipDownloadMin = formData.get("vip_download_min_spent") as string;
 
   const now = new Date().toISOString();
@@ -413,6 +414,7 @@ export async function updatePlatformSettingsAction(formData: FormData) {
     { key: "koin_usd_parity", value: parity },
     { key: "usdt_trc20_address", value: trc20 },
     { key: "usdt_bep20_address", value: bep20 },
+    { key: "binance_pay_id", value: binancePayId },
     { key: "vip_download_min_spent", value: vipDownloadMin },
   ];
 

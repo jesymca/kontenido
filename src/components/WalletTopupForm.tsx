@@ -7,9 +7,10 @@ import { submitTopupAction } from "@/actions/wallet";
 interface Props {
   trc20Address: string;
   bep20Address: string;
+  binancePayId?: string | null;
 }
 
-export default function WalletTopupForm({ trc20Address, bep20Address }: Props) {
+export default function WalletTopupForm({ trc20Address, bep20Address, binancePayId }: Props) {
   const [copiedNetwork, setCopiedNetwork] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +111,45 @@ export default function WalletTopupForm({ trc20Address, bep20Address }: Props) {
             {bep20Address}
           </p>
         </div>
+
+        {/* Binance Pay ID */}
+        {binancePayId && (
+          <div className="p-3.5 bg-slate-950 border border-amber-500/40 rounded-2xl">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                Binance ID / Binance Pay (Sin Comisión de Red)
+              </span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(binancePayId, "BINANCE_ID")}
+                className="text-xs text-amber-400 hover:text-white flex items-center gap-1 transition"
+              >
+                {copiedNetwork === "BINANCE_ID" ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">¡Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copiar ID</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="font-mono text-xs font-bold text-white break-all select-all">
+              {binancePayId}
+            </p>
+            <span className="text-[10px] text-slate-400 mt-1 block">
+              En tu app de Binance ve a <strong>Pagar (Binance Pay) → Enviar</strong> e introduce este ID.
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-[11px] text-slate-400">
+        💡 <strong>Vías disponibles:</strong> Puedes transferir por <strong>TRC20</strong>, <strong>BEP20</strong> o directamente por <strong>Binance Pay ID</strong>. Tras completar el pago, ingresa el monto y el TXID / Referencia para que SUPER_ADMIN confirme tu saldo.
       </div>
 
       {error && (

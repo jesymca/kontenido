@@ -37,7 +37,7 @@ export default async function CuentaPage() {
     where: eq(wallets.userId, userId),
   });
 
-  // 3. Obtener direcciones USDT configuradas por SUPER_ADMIN
+  // 3. Obtener direcciones USDT y Binance Pay ID configuradas por SUPER_ADMIN
   const allSettings = await db.query.settings.findMany();
   const trc20 =
     allSettings.find((s) => s.key === "usdt_trc20_address")?.value ||
@@ -45,6 +45,8 @@ export default async function CuentaPage() {
   const bep20 =
     allSettings.find((s) => s.key === "usdt_bep20_address")?.value ||
     "0x71C83638209121a91e57c61775e54d5885dc8bA8";
+  const binancePayId =
+    allSettings.find((s) => s.key === "binance_pay_id")?.value || null;
 
   // 4. Obtener transacciones del usuario
   const transactions = await db.query.walletTransactions.findMany({
@@ -214,7 +216,11 @@ export default async function CuentaPage() {
               </div>
             </div>
 
-            <WalletTopupForm trc20Address={trc20} bep20Address={bep20} />
+            <WalletTopupForm
+              trc20Address={trc20}
+              bep20Address={bep20}
+              binancePayId={binancePayId}
+            />
           </div>
 
           {/* 3. TIENDA DE MEMBRESÍAS VIP */}
