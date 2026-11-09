@@ -4,12 +4,24 @@ import { desc } from "drizzle-orm";
 import AdminUsersTable from "@/components/AdminUsersTable";
 import { Users } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Vista de Administración y CRUD de Usuarios (/admin/usuarios)
  */
 export default async function AdminUsuariosPage() {
   const allUsers = await db.query.users.findMany({
     orderBy: [desc(users.createdAt)],
+    with: {
+      profile: true,
+      posts: {
+        where: (p, { eq }) => eq(p.isDeleted, 0),
+        orderBy: (p, { desc }) => [desc(p.createdAt)],
+        with: {
+          media: true,
+        },
+      },
+    },
   });
 
   const memberships = await db.query.vipMemberships.findMany();
