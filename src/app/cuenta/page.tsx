@@ -237,7 +237,7 @@ export default async function CuentaPage() {
               </div>
             </div>
 
-            <div className="space-y-3 flex-1 overflow-y-auto max-h-[460px] pr-1">
+            <div className="space-y-3 flex-1 overflow-y-auto max-h-[580px] pr-2 custom-scrollbar">
               {memberships.map((vip) => (
                 <div
                   key={vip.id}
@@ -271,8 +271,13 @@ export default async function CuentaPage() {
                     </span>
                     <BuyVipButton
                       membershipId={vip.id}
+                      membershipName={vip.name}
+                      badgeText={vip.badgeText}
+                      badgeColor={vip.badgeColor}
+                      allowDownload={vip.allowDownload}
                       priceKoin={vip.priceKoin}
                       isCurrent={user?.vipMembershipId === vip.id}
+                      userBalanceKoin={wallet?.balanceKoin || 0}
                     />
                   </div>
                 </div>
