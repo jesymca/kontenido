@@ -29,8 +29,8 @@ export const s3Client = new S3Client({
 });
 
 export const BUCKETS = {
-  MEDIA: process.env.R2_BUCKET || "kontenido-media",
-  PRIVATE: process.env.R2_BUCKET_PRIVATE || "kontenido-private",
+  MEDIA: process.env.R2_BUCKET || "kontenido",
+  PRIVATE: process.env.R2_BUCKET_PRIVATE || process.env.R2_BUCKET || "kontenido",
 };
 
 /**
