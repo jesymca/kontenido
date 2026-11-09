@@ -147,15 +147,34 @@ export default async function HomePage() {
                   href={`/${creator.username}`}
                   className="group bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition flex flex-col shadow-lg"
                 >
-                  <div className="h-32 bg-gradient-to-r from-rose-900/60 to-purple-900/60 relative">
-                    <div className="absolute top-3 right-3 bg-slate-950/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-[11px] font-bold text-amber-400 border border-amber-500/30">
+                  <div className="h-32 bg-gradient-to-r from-rose-900/60 to-purple-900/60 relative overflow-hidden">
+                    {creator.bannerKey ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`/api/media/${creator.bannerKey}`}
+                        alt="Portada"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-r from-rose-950 via-purple-950 to-slate-900 opacity-80" />
+                    )}
+                    <div className="absolute top-3 right-3 bg-slate-950/80 backdrop-blur-sm px-2.5 py-1 rounded-full text-[11px] font-bold text-amber-400 border border-amber-500/30 shadow-md">
                       {creator.priceKoin} KOIN/mes
                     </div>
                   </div>
 
                   <div className="p-5 flex-1 flex flex-col -mt-10 relative">
-                    <div className="w-16 h-16 rounded-2xl bg-slate-800 border-2 border-slate-900 overflow-hidden flex items-center justify-center text-white font-bold text-xl mb-3 shadow-md">
-                      {(creator.displayName || creator.username)[0]?.toUpperCase() || "K"}
+                    <div className="w-16 h-16 rounded-2xl bg-slate-800 border-2 border-slate-900 overflow-hidden flex items-center justify-center text-white font-bold text-xl mb-3 shadow-md shrink-0">
+                      {creator.avatarKey ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/media/${creator.avatarKey}`}
+                          alt={creator.displayName || creator.username}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        (creator.displayName || creator.username)[0]?.toUpperCase() || "K"
+                      )}
                     </div>
 
                     <UserLevelBadge
