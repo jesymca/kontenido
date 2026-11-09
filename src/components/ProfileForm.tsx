@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateProfileAction } from "@/actions/creator";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
 import { validateNoExternalContact } from "@/lib/contentFilter";
+import ImageCropModal from "@/components/ImageCropModal";
 import {
   Check,
   AlertCircle,
@@ -17,6 +18,7 @@ import {
   Upload,
   Smile,
   AtSign,
+  Move,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -72,30 +74,114 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
 
+  // Estados de recorte interactivo
+  const [cropModalData, setCropModalData] = useState<{
+    imageSrc: string;
+    aspectRatio: number;
+    title: string;
+    description: string;
+    type: "banner" | "avatar";
+    originalFileName: string;
+  } | null>(null);
+
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   // Subir archivo a Cloudflare R2 vía URL prefirmada
   const uploadToR2 = async (file: File, category: "avatar" | "banner") => {
-    const res = await fetch("/api/uploads/presigned", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: file.name,
-        contentType: file.type,
-        sizeBytes: file.size,
-        category,
-      }),
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || `Error subiendo ${category}`);
+    let res: Response;
+    try {
+      res = await fetch("/api/uploads/presigned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || "image/jpeg",
+          sizeBytes: file.size,
+          category,
+        }),
+      });
+    } catch (err: any) {
+      throw new Error("No se pudo conectar con el servidor para iniciar la subida.");
+    }
 
-    await fetch(data.uploadUrl, {
-      method: "PUT",
-      body: file,
-      headers: { "Content-Type": file.type },
-    });
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      throw new Error(`Error del servidor al autorizar subida (${res.status}): ${errorText || "Sesión o permisos inválidos"}`);
+    }
+
+    const data = await res.json();
+    if (!data.success || !data.uploadUrl) {
+      throw new Error(data.error || `Error al obtener URL de subida de ${category}`);
+    }
+
+    try {
+      const uploadRes = await fetch(data.uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "image/jpeg" },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error(`Cloudflare R2 rechazó la subida (HTTP ${uploadRes.status}).`);
+      }
+    } catch (err: any) {
+      throw new Error(
+        `Error al transferir la imagen a Cloudflare R2: ${err.message}. Verifica que el bucket 'kontenido' tenga CORS configurado.`
+      );
+    }
 
     return data.key as string;
+  };
+
+  // Manejo de selección y encuadre/recorte interactivo de imágenes
+  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      const url = URL.createObjectURL(f);
+      setCropModalData({
+        imageSrc: url,
+        aspectRatio: 3 / 1, // Proporción panorámica de portada (1200 x 400)
+        title: "Encuadrar Foto de Portada (Banner)",
+        description: "Arrastra la foto hacia arriba/abajo y ajusta el zoom para que se vea la parte superior deseada.",
+        type: "banner",
+        originalFileName: f.name,
+      });
+    }
+  };
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      const url = URL.createObjectURL(f);
+      setCropModalData({
+        imageSrc: url,
+        aspectRatio: 1, // Cuadrado para foto de perfil
+        title: "Encuadrar Foto de Perfil (Avatar)",
+        description: "Arrastra para centrar el rostro y ajusta el zoom.",
+        type: "avatar",
+        originalFileName: f.name,
+      });
+    }
+  };
+
+  const handleCropConfirm = (croppedBlob: Blob, croppedPreviewUrl: string) => {
+    if (!cropModalData) return;
+
+    const file = new File(
+      [croppedBlob],
+      cropModalData.originalFileName.replace(/\.[^/.]+$/, "") + "_cropped.jpg",
+      { type: "image/jpeg" }
+    );
+
+    if (cropModalData.type === "banner") {
+      setBannerFile(file);
+      setBannerPreview(croppedPreviewUrl);
+    } else {
+      setAvatarFile(file);
+      setAvatarPreview(croppedPreviewUrl);
+    }
+
+    setCropModalData(null);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -204,18 +290,12 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
 
           <label className="absolute bottom-3 right-3 px-3 py-1.5 bg-slate-900/90 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl cursor-pointer border border-slate-700 transition flex items-center gap-1.5 shadow-md">
             <Camera className="w-3.5 h-3.5 text-rose-400" />
-            <span>{bannerPreview || profile?.bannerKey ? "Cambiar Portada" : "Subir Portada"}</span>
+            <span>{bannerPreview || profile?.bannerKey ? "Cambiar y Encuadrar Portada" : "Subir y Encuadrar Portada"}</span>
             <input
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  setBannerFile(f);
-                  setBannerPreview(URL.createObjectURL(f));
-                }
-              }}
+              onChange={handleBannerSelect}
             />
           </label>
         </div>
@@ -237,18 +317,12 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
           <div>
             <label className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition inline-flex items-center gap-1.5 border border-slate-700">
               <Upload className="w-3.5 h-3.5 text-rose-400" />
-              <span>{avatarPreview || profile?.avatarKey ? "Cambiar Foto de Perfil" : "Subir Foto de Perfil"}</span>
+              <span>{avatarPreview || profile?.avatarKey ? "Cambiar y Centrar Avatar" : "Subir y Centrar Avatar"}</span>
               <input
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    setAvatarFile(f);
-                    setAvatarPreview(URL.createObjectURL(f));
-                  }
-                }}
+                onChange={handleAvatarSelect}
               />
             </label>
             <p className="text-[11px] text-slate-500 mt-1">Formato cuadrado (JPG o PNG de hasta 15MB).</p>
@@ -447,6 +521,18 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
         <Save className="w-4 h-4" />
         {loading ? "Guardando en Cloudflare R2..." : "Guardar Cambios del Perfil"}
       </button>
+
+      {/* Modal de recorte interactivo para encuadrar la parte superior o deseada de la foto */}
+      {cropModalData && (
+        <ImageCropModal
+          imageSrc={cropModalData.imageSrc}
+          aspectRatio={cropModalData.aspectRatio}
+          title={cropModalData.title}
+          description={cropModalData.description}
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropModalData(null)}
+        />
+      )}
     </form>
   );
 }
