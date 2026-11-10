@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -10,11 +11,14 @@ import {
   purchases,
   vipMemberships,
   creatorSubscriptionPlans,
+  profileLikes,
+  profileFavorites,
 } from "@/lib/db/schema";
 import { eq, and, desc, gt } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
 import SubscribeButton from "@/components/SubscribeButton";
 import BuyPostButton from "@/components/BuyPostButton";
+import ProfileInteractions from "@/components/ProfileInteractions";
 import {
   Sparkles,
   Lock,
@@ -26,11 +30,90 @@ import {
   Calendar,
   Clock,
   AlertCircle,
+  Heart,
+  Image as ImageIcon,
+  Video,
+  Bot,
 } from "lucide-react";
 import { getPresignedDownloadUrl, BUCKETS } from "@/lib/r2";
 
 interface PageProps {
   params: Promise<{ username: string }>;
+}
+
+/**
+ * Metadatos dinámicos para Open Graph (WhatsApp, Telegram, Instagram, Twitter)
+ * Permite que al compartir el link de la creadora se vea su foto real, nombre y precio
+ */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { username } = await params;
+  const decodedUsername = decodeURIComponent(username).toLowerCase().trim();
+  const baseUrl = process.env.NEXTAUTH_URL || "https://kontenido.online";
+
+  try {
+    const creator = await db.query.users.findFirst({
+      where: eq(users.username, decodedUsername),
+      with: {
+        profile: true,
+      },
+    });
+
+    if (!creator) {
+      return {
+        title: "Creadora no encontrada | KONTENIDO",
+        description: "El perfil solicitado no existe o ha sido modificado.",
+      };
+    }
+
+    const displayName = creator.profile?.displayName || creator.username;
+    const bio =
+      creator.profile?.bio ||
+      `Descubre fotos, videos y contenido exclusivo de ${displayName} en KONTENIDO.`;
+    const price = creator.profile?.subscriptionPriceKoin || 10;
+
+    // Foto para compartir en redes: avatar prioritario, luego banner, luego logo oficial
+    let ogImage = `${baseUrl}/og-image.png`;
+    if (creator.profile?.avatarKey) {
+      ogImage = `${baseUrl}/api/media/${creator.profile.avatarKey}`;
+    } else if (creator.profile?.bannerKey) {
+      ogImage = `${baseUrl}/api/media/${creator.profile.bannerKey}`;
+    }
+
+    const pageTitle = `${displayName} (@${creator.username}) — KONTENIDO`;
+    const pageDesc = `${bio} • Suscríbete por ${price} KOIN/mes.`;
+
+    return {
+      title: pageTitle,
+      description: pageDesc,
+      alternates: {
+        canonical: `/${creator.username}`,
+      },
+      openGraph: {
+        title: pageTitle,
+        description: pageDesc,
+        url: `${baseUrl}/${creator.username}`,
+        siteName: "KONTENIDO",
+        type: "profile",
+        locale: "es_VE",
+        images: [
+          {
+            url: ogImage,
+            alt: `${displayName} en KONTENIDO`,
+          },
+        ],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: pageTitle,
+        description: pageDesc,
+        images: [ogImage],
+      },
+    };
+  } catch {
+    return {
+      title: `@${decodedUsername} | KONTENIDO`,
+    };
+  }
 }
 
 /**
@@ -123,10 +206,46 @@ export default async function PublicProfilePage({ params }: PageProps) {
     },
   });
 
+  // Métricas intuitivas de contenido: fotos y videos
+  let photosCount = 0;
+  let videosCount = 0;
+  for (const post of creatorPosts) {
+    if (post.media) {
+      for (const m of post.media) {
+        if (m.type === "IMAGE") photosCount++;
+        if (m.type === "VIDEO") videosCount++;
+      }
+    }
+  }
+
   const profile = creator.profile;
   const subscriptionPrice = profile?.subscriptionPriceKoin || 10.0;
 
-  // 6. Obtener los planes de suscripción configurados por la creadora
+  // 6. Obtener estado de Me Gusta (Likes) y Favorito
+  let isLiked = false;
+  let isFavorited = false;
+  const totalLikes = profile?.likesCount || 0;
+
+  if (currentUserId) {
+    const [likeRow, favRow] = await Promise.all([
+      db.query.profileLikes.findFirst({
+        where: and(
+          eq(profileLikes.userId, currentUserId),
+          eq(profileLikes.creatorId, creator.id)
+        ),
+      }),
+      db.query.profileFavorites.findFirst({
+        where: and(
+          eq(profileFavorites.userId, currentUserId),
+          eq(profileFavorites.creatorId, creator.id)
+        ),
+      }),
+    ]);
+    isLiked = !!likeRow;
+    isFavorited = !!favRow;
+  }
+
+  // 7. Obtener los planes de suscripción configurados por la creadora
   const plans = await db.query.creatorSubscriptionPlans.findMany({
     where: and(
       eq(creatorSubscriptionPlans.creatorId, creator.id),
@@ -182,6 +301,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
                   vipBadgeColor={creatorVipColor}
                   role={creator.role}
                   kycStatus={creator.kycStatus}
+                  isAiGenerated={profile?.isAiGenerated === 1}
                   showRoleBadge
                 />
                 <h1 className="text-2xl sm:text-3xl font-black text-white mt-1">
@@ -190,34 +310,72 @@ export default async function PublicProfilePage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Botón de suscripción o edición */}
-            {isOwner ? (
-              <a
-                href="/panel"
-                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-              >
-                Editar mi perfil
-              </a>
-            ) : (
-              <SubscribeButton
+            {/* Botón de suscripción o edición + Me Gusta y Favoritos */}
+            <div className="flex flex-wrap items-center gap-2">
+              <ProfileInteractions
                 creatorId={creator.id}
-                priceKoin={subscriptionPrice}
-                isSubscriber={isSubscriber}
-                plans={plans}
+                initialLikesCount={totalLikes}
+                initialIsLiked={isLiked}
+                initialIsFavorited={isFavorited}
+                isOwner={isOwner}
+                isAuthenticated={!!currentUserId}
               />
-            )}
+
+              {isOwner ? (
+                <a
+                  href="/panel"
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  Editar mi perfil
+                </a>
+              ) : (
+                <SubscribeButton
+                  creatorId={creator.id}
+                  priceKoin={subscriptionPrice}
+                  isSubscriber={isSubscriber}
+                  plans={plans}
+                />
+              )}
+            </div>
           </div>
 
-          <p className="text-slate-300 text-sm leading-relaxed max-w-2xl mb-6">
+          <p className="text-slate-300 text-sm leading-relaxed max-w-2xl mb-4">
             {profile?.bio || "Creadora de contenido exclusiva en KONTENIDO. Suscríbete para acceder a mis fotos y videos privados."}
           </p>
 
-          <div className="flex items-center gap-6 pt-4 border-t border-slate-800 text-xs text-slate-400">
-            <div>
-              <strong className="text-white font-bold">{creatorPosts.length}</strong> Publicaciones
+          {profile?.isAiGenerated === 1 && (
+            <div className="mb-5 p-3 bg-gradient-to-r from-cyan-950/60 via-slate-950 to-blue-950/40 border border-cyan-500/30 rounded-2xl flex items-center gap-2.5 max-w-xl text-cyan-200 text-xs shadow-md">
+              <Bot className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span>
+                <strong>Aviso de Transparencia:</strong> El contenido visual de este perfil es creado o asistido mediante <strong>Inteligencia Artificial (IA)</strong>.
+              </span>
             </div>
-            <div>
-              <strong className="text-amber-400 font-bold">{subscriptionPrice} KOIN</strong> / Mes
+          )}
+
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 pt-4 border-t border-slate-800 text-xs text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <ImageIcon className="w-4 h-4 text-rose-400" />
+              <span>
+                <strong className="text-white font-bold">{photosCount}</strong> Fotos
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Video className="w-4 h-4 text-purple-400" />
+              <span>
+                <strong className="text-white font-bold">{videosCount}</strong> Videos
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Coins className="w-4 h-4 text-amber-400" />
+              <span>
+                <strong className="text-amber-400 font-bold">{subscriptionPrice} KOIN</strong> / Mes
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+              <span>
+                <strong className="text-white font-bold">{totalLikes}</strong> Me Gusta
+              </span>
             </div>
             {creator.kycStatus === "APPROVED" ? (
               <div className="flex items-center gap-1 text-emerald-400 font-bold">
@@ -246,9 +404,10 @@ export default async function PublicProfilePage({ params }: PageProps) {
             <div className="space-y-6">
               {creatorPosts.map(async (post) => {
                 // Verificar si este post está desbloqueado para el espectador
-                const isFree = post.priceKoin === 0;
+                const isPublicTeaser = post.isPublicTeaser === 1;
+                const isFreeSubscriber = post.priceKoin === 0 && !isPublicTeaser;
                 const isPurchased = purchasedPostIds.has(post.id);
-                const isUnlocked = isOwner || isSuperAdmin || (isFree && isSubscriber) || isPurchased;
+                const isUnlocked = isOwner || isSuperAdmin || isPublicTeaser || (isFreeSubscriber && isSubscriber) || isPurchased;
 
                 // Generar URL prefirmada si está desbloqueado
                 let mediaUrl: string | null = null;
@@ -258,7 +417,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
                     mediaUrl = await getPresignedDownloadUrl(
                       BUCKETS.MEDIA,
                       firstMedia.originalKey,
-                      isUnlocked ? 900 : 60 // 15min si comprado, 60s si preview
+                      isUnlocked ? 900 : 60 // 15min si comprado o teaser libre, 60s si preview
                     );
                   } catch (e) {
                     console.error("Error firmando URL:", e);
@@ -281,9 +440,15 @@ export default async function PublicProfilePage({ params }: PageProps) {
 
                       <div className="flex items-center gap-2">
                         {isUnlocked ? (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                            <Unlock className="w-3 h-3" /> Desbloqueado
-                          </span>
+                          isPublicTeaser ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1">
+                              <Sparkles className="w-3 h-3 text-rose-400" /> Muestra Gratuita (Público)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                              <Unlock className="w-3 h-3" /> Desbloqueado
+                            </span>
+                          )
                         ) : (
                           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
                             <Lock className="w-3 h-3" />

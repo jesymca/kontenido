@@ -173,7 +173,8 @@ export async function updateProfileAction(formData: FormData) {
   const bio = (formData.get("bio") as string)?.trim();
   const priceRaw = formData.get("subscriptionPriceKoin") as string;
   const subscriptionPriceKoin = parseFloat(priceRaw) || 10.0;
-  const isPublished = formData.get("isPublished") === "on" ? 1 : 0;
+  const isPublished = formData.get("isPublished") === "on" || formData.get("isPublished") === "1" ? 1 : 0;
+  const isAiGenerated = formData.get("isAiGenerated") === "on" || formData.get("isAiGenerated") === "1" ? 1 : 0;
   const avatarKey = (formData.get("avatarKey") as string) || undefined;
   const bannerKey = (formData.get("bannerKey") as string) || undefined;
 
@@ -235,6 +236,7 @@ export async function updateProfileAction(formData: FormData) {
       bio,
       subscriptionPriceKoin,
       isPublished,
+      isAiGenerated,
       ...(avatarKey ? { avatarKey } : {}),
       ...(bannerKey ? { bannerKey } : {}),
       updatedAt: now,
@@ -363,6 +365,8 @@ export async function createPostAction(formData: FormData) {
   const description = (formData.get("description") as string)?.trim();
   const priceRaw = formData.get("priceKoin") as string;
   const priceKoin = parseFloat(priceRaw) || 0.0;
+  const isPublicTeaserRaw = formData.get("isPublicTeaser") as string;
+  const isPublicTeaser = isPublicTeaserRaw === "1" ? 1 : 0;
   const mediaKeysJson = formData.get("mediaKeys") as string; // JSON con los archivos subidos
 
   if (!title) {
@@ -390,6 +394,7 @@ export async function createPostAction(formData: FormData) {
     description,
     priceKoin,
     isPackageItem: 0,
+    isPublicTeaser,
     status: "APPROVED", // Por agilidad y control directo
     isDeleted: 0,
     createdAt: now,

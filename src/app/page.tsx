@@ -2,10 +2,21 @@ import Link from "next/link";
 import Image from "next/image";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { users, profiles, posts } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { users, profiles, posts, mediaAssets } from "@/lib/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
-import { Sparkles, Coins, ShieldCheck, Flame, ArrowRight, Heart, Star, Check } from "lucide-react";
+import {
+  Sparkles,
+  Coins,
+  ShieldCheck,
+  Flame,
+  ArrowRight,
+  Heart,
+  Star,
+  Check,
+  Image as ImageIcon,
+  Video,
+} from "lucide-react";
 
 /**
  * Página de inicio (Landing Page) de KONTENIDO
@@ -15,6 +26,7 @@ export default async function HomePage() {
   const session = await auth();
 
   // Obtener creadores destacados para mostrar en la página de inicio
+  // Algoritmo de posicionamiento: ordenados por Me Gusta (likesCount) y nivel de inversión
   let featuredCreators: Array<{
     id: string;
     username: string;
@@ -24,10 +36,14 @@ export default async function HomePage() {
     avatarKey: string | null;
     bannerKey: string | null;
     priceKoin: number;
+    likesCount: number;
+    isAiGenerated: number;
+    photosCount: number;
+    videosCount: number;
   }> = [];
 
   try {
-    featuredCreators = await db
+    const rawCreators = await db
       .select({
         id: users.id,
         username: users.username,
@@ -37,11 +53,51 @@ export default async function HomePage() {
         avatarKey: profiles.avatarKey,
         bannerKey: profiles.bannerKey,
         priceKoin: profiles.subscriptionPriceKoin,
+        likesCount: profiles.likesCount,
+        isAiGenerated: profiles.isAiGenerated,
       })
       .from(users)
       .innerJoin(profiles, eq(users.id, profiles.userId))
       .where(eq(users.role, "CREATOR"))
+      .orderBy(desc(profiles.likesCount), desc(users.level))
       .limit(8);
+
+    featuredCreators = await Promise.all(
+      rawCreators.map(async (c) => {
+        let photos = 0;
+        let videos = 0;
+        try {
+          const mediaCounts = await db
+            .select({
+              type: mediaAssets.type,
+              count: sql<number>`count(*)`,
+            })
+            .from(mediaAssets)
+            .where(
+              and(
+                eq(mediaAssets.creatorId, c.id),
+                eq(mediaAssets.isDeleted, 0)
+              )
+            )
+            .groupBy(mediaAssets.type);
+
+          for (const m of mediaCounts) {
+            if (m.type === "IMAGE") photos = Number(m.count);
+            if (m.type === "VIDEO") videos = Number(m.count);
+          }
+        } catch {
+          // Fallback seguro
+        }
+
+        return {
+          ...c,
+          likesCount: c.likesCount || 0,
+          isAiGenerated: c.isAiGenerated || 0,
+          photosCount: photos,
+          videosCount: videos,
+        };
+      })
+    );
   } catch (err) {
     console.error("Error al consultar creadores destacados en HomePage (verificar TURSO_DATABASE_URL):", err);
   }
@@ -180,6 +236,7 @@ export default async function HomePage() {
                     <UserLevelBadge
                       level={creator.level || 0}
                       username={creator.username}
+                      isAiGenerated={creator.isAiGenerated === 1}
                       className="mb-1"
                     />
 
@@ -191,7 +248,26 @@ export default async function HomePage() {
                       {creator.bio || "Creadora de contenido exclusiva en KONTENIDO."}
                     </p>
 
-                    <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                    {/* Métricas intuitivas de contenido: Fotos, Videos y Likes */}
+                    <div className="grid grid-cols-3 gap-1.5 py-2 px-2.5 my-3 bg-slate-950/70 border border-slate-800/80 rounded-xl text-center">
+                      <div>
+                        <span className="text-[11px] font-bold text-white block">{creator.photosCount}</span>
+                        <span className="text-[9px] text-slate-500 uppercase tracking-wider block">Fotos</span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-purple-400 block">{creator.videosCount}</span>
+                        <span className="text-[9px] text-slate-500 uppercase tracking-wider block">Videos</span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-rose-500 flex items-center justify-center gap-0.5">
+                          <Heart className="w-2.5 h-2.5 fill-rose-500" />
+                          {creator.likesCount}
+                        </span>
+                        <span className="text-[9px] text-slate-500 uppercase tracking-wider block">Likes</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
                       <span>Ver perfil completo</span>
                       <ArrowRight className="w-4 h-4 text-rose-500 group-hover:translate-x-1 transition-transform" />
                     </div>

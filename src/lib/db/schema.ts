@@ -46,6 +46,8 @@ export const profiles = sqliteTable("profiles", {
   avatarKey: text("avatar_key"), // Clave del archivo de avatar en Cloudflare R2
   bannerKey: text("banner_key"), // Clave del archivo de portada/banner en Cloudflare R2
   subscriptionPriceKoin: real("subscription_price_koin").notNull().default(10.0), // Precio mensual en KOIN
+  likesCount: integer("likes_count").notNull().default(0), // Conteo de Me Gusta (Corazones) para algoritmo de posicionamiento
+  isAiGenerated: integer("is_ai_generated").notNull().default(0), // 1 si el contenido del perfil es generado con Inteligencia Artificial
   isPublished: integer("is_published").notNull().default(0), // Si el perfil está visible públicamente (1) o borrador (0)
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -190,6 +192,7 @@ export const posts = sqliteTable("posts", {
   description: text("description"),
   priceKoin: real("price_koin").notNull().default(0.0), // 0 si es exclusivo para suscriptores o de pago individual
   isPackageItem: integer("is_package_item").notNull().default(0), // Si forma parte de un paquete
+  isPublicTeaser: integer("is_public_teaser").notNull().default(0), // 1 si es muestra gratuita visible sin suscripción
   status: text("status", { enum: ["DRAFT", "PENDING_REVIEW", "APPROVED", "REJECTED"] })
     .notNull()
     .default("PENDING_REVIEW"),
@@ -538,6 +541,40 @@ export const settings = sqliteTable("settings", {
 
 /**
  * ============================================================================
+ * TABLA: profile_likes (Me Gusta / Corazones dados a los perfiles de creadoras)
+ * Utilizado por el algoritmo para posicionar y clasificar a las creadoras
+ * ============================================================================
+ */
+export const profileLikes = sqliteTable("profile_likes", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  creatorId: text("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: profile_favorites (Perfiles guardados en Favoritos por Consumidores)
+ * Permite a los consumidores tener su lista de creadoras deseadas para suscribirse
+ * ============================================================================
+ */
+export const profileFavorites = sqliteTable("profile_favorites", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  creatorId: text("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
  * RELACIONES DRIZZLE ORM
  * ============================================================================
  */
@@ -566,6 +603,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   subscriptionPlans: many(creatorSubscriptionPlans),
   messagesSent: many(messages, { relationName: "sender" }),
   messagesReceived: many(messages, { relationName: "receiver" }),
+  likesGiven: many(profileLikes, { relationName: "userLikes" }),
+  likesReceived: many(profileLikes, { relationName: "creatorLikes" }),
+  favoritesGiven: many(profileFavorites, { relationName: "userFavorites" }),
+  favoritesReceived: many(profileFavorites, { relationName: "creatorFavorites" }),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -788,5 +829,31 @@ export const auditLogRelations = relations(auditLog, ({ one }) => ({
   actor: one(users, {
     fields: [auditLog.actorId],
     references: [users.id],
+  }),
+}));
+
+export const profileLikesRelations = relations(profileLikes, ({ one }) => ({
+  user: one(users, {
+    fields: [profileLikes.userId],
+    references: [users.id],
+    relationName: "userLikes",
+  }),
+  creator: one(users, {
+    fields: [profileLikes.creatorId],
+    references: [users.id],
+    relationName: "creatorLikes",
+  }),
+}));
+
+export const profileFavoritesRelations = relations(profileFavorites, ({ one }) => ({
+  user: one(users, {
+    fields: [profileFavorites.userId],
+    references: [users.id],
+    relationName: "userFavorites",
+  }),
+  creator: one(users, {
+    fields: [profileFavorites.creatorId],
+    references: [users.id],
+    relationName: "creatorFavorites",
   }),
 }));

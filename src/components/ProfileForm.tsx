@@ -21,6 +21,7 @@ import {
   AtSign,
   Move,
   Smartphone,
+  Bot,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,6 +35,7 @@ interface Profile {
   bio: string | null;
   subscriptionPriceKoin: number;
   isPublished: number;
+  isAiGenerated?: number;
   avatarKey?: string | null;
   bannerKey?: string | null;
 }
@@ -573,6 +575,37 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
           defaultChecked={profile?.isPublished === 1}
           className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-rose-600 focus:ring-rose-500 cursor-pointer"
         />
+      </div>
+
+      {/* 6. IDENTIFICACIÓN DE CONTENIDO CREADO POR INTELIGENCIA ARTIFICIAL (IA) */}
+      <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-950 via-slate-950 to-cyan-950/20 border border-slate-800 rounded-2xl flex items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+            <Bot className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-white">
+                Contenido Creado por Inteligencia Artificial (IA)
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                Transparencia IA
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400 block mt-1 leading-relaxed">
+              Activa este switch si las fotos, videos o modelos de este perfil son generados o renderizados con IA. Tu perfil y publicaciones lucirán una insignia oficial de <strong>CREADO CON IA</strong> para que los consumidores estén informados.
+            </span>
+          </div>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+          <input
+            type="checkbox"
+            name="isAiGenerated"
+            defaultChecked={profile?.isAiGenerated === 1}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+        </label>
       </div>
 
       {uploadProgress && (

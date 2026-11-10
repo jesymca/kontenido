@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Sparkles,
   ExternalLink,
+  Bookmark,
 } from "lucide-react";
 
 export interface SubscribedCreatorItem {
@@ -42,6 +43,12 @@ export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProp
       href: "/cuenta/suscripciones",
       label: `Mis Suscripciones (${subscriptions.length})`,
       icon: Heart,
+      exact: false,
+    },
+    {
+      href: "/cuenta/favoritos",
+      label: "Mis Favoritos",
+      icon: Bookmark,
       exact: false,
     },
     {

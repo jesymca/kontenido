@@ -15,6 +15,7 @@ import {
   X,
   Camera,
   Smartphone,
+  Globe,
 } from "lucide-react";
 import { createPostAction } from "@/actions/creator";
 import { validateNoExternalContact } from "@/lib/contentFilter";
@@ -32,7 +33,7 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priceKoin, setPriceKoin] = useState("0");
-  const [isPpv, setIsPpv] = useState(false);
+  const [postAccess, setPostAccess] = useState<"subscribers" | "free_teaser" | "ppv">("subscribers");
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<Array<{ url: string; type: "IMAGE" | "VIDEO"; name: string }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -163,7 +164,8 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
       const formData = new FormData();
       formData.set("title", title.trim());
       formData.set("description", description.trim());
-      formData.set("priceKoin", isPpv ? priceKoin : "0");
+      formData.set("isPublicTeaser", postAccess === "free_teaser" ? "1" : "0");
+      formData.set("priceKoin", postAccess === "ppv" ? priceKoin : "0");
       formData.set("mediaKeys", JSON.stringify(uploadedMedia));
 
       const res = await createPostAction(formData);
@@ -176,7 +178,7 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
       setDescription("");
       setFiles([]);
       setFilePreviews([]);
-      setIsPpv(false);
+      setPostAccess("subscribers");
       setPriceKoin("0");
       setLoading(false);
       setProgress(null);
@@ -340,43 +342,93 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
           </label>
         </div>
 
-        {/* Configuración de Pago (Incluido en Suscripción vs Pago por Ver / PPV) */}
-        <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsPpv(!isPpv)}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition ${
-                isPpv
-                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                  : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              }`}
-            >
-              {isPpv ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
-            </button>
-            <div>
-              <span className="text-xs font-bold text-white block">
-                {isPpv ? "Contenido de Pago por Ver (PPV)" : "Incluido en la Suscripción"}
-              </span>
-              <span className="text-[11px] text-slate-400">
-                {isPpv
-                  ? "Cualquier usuario puede desbloquear este post pagando el monto en KOIN."
-                  : "Acceso ilimitado para todos tus suscriptores activos."}
-              </span>
-            </div>
+        {/* Configuración de Acceso y Visibilidad del Post */}
+        <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white block">
+              ¿Quién puede ver este contenido?
+            </span>
+            <span className="text-[11px] text-slate-500">
+              {postAccess === "free_teaser"
+                ? "Visible para todo público gratis"
+                : postAccess === "subscribers"
+                ? "Exclusivo para suscriptores"
+                : "Pago individual por ver"}
+            </span>
           </div>
 
-          {isPpv && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-xs font-bold text-amber-400 shrink-0">Precio:</span>
-              <div className="relative w-32">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Opción 1: Muestra Gratuita (Pública / Teaser) */}
+            <button
+              type="button"
+              onClick={() => setPostAccess("free_teaser")}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
+                postAccess === "free_teaser"
+                  ? "bg-rose-600/15 border-rose-500 text-white shadow-sm"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Globe className={`w-4 h-4 ${postAccess === "free_teaser" ? "text-rose-400" : "text-slate-500"}`} />
+                <span className="text-xs font-bold">Muestra Gratuita</span>
+              </div>
+              <span className="text-[10px] leading-tight text-slate-400">
+                Público y gratis. Para que los usuarios conozcan tu contenido sin pagar.
+              </span>
+            </button>
+
+            {/* Opción 2: Solo Suscriptores */}
+            <button
+              type="button"
+              onClick={() => setPostAccess("subscribers")}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
+                postAccess === "subscribers"
+                  ? "bg-emerald-500/15 border-emerald-500 text-white shadow-sm"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Unlock className={`w-4 h-4 ${postAccess === "subscribers" ? "text-emerald-400" : "text-slate-500"}`} />
+                <span className="text-xs font-bold">Solo Suscriptores</span>
+              </div>
+              <span className="text-[10px] leading-tight text-slate-400">
+                Incluido en la suscripción mensual de tu perfil.
+              </span>
+            </button>
+
+            {/* Opción 3: Pago por Ver (PPV) */}
+            <button
+              type="button"
+              onClick={() => setPostAccess("ppv")}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
+                postAccess === "ppv"
+                  ? "bg-amber-500/15 border-amber-500 text-white shadow-sm"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Lock className={`w-4 h-4 ${postAccess === "ppv" ? "text-amber-400" : "text-slate-500"}`} />
+                <span className="text-xs font-bold">Pago por Ver (PPV)</span>
+              </div>
+              <span className="text-[10px] leading-tight text-slate-400">
+                Cualquiera puede desbloquearlo pagando un monto en KOIN.
+              </span>
+            </button>
+          </div>
+
+          {postAccess === "ppv" && (
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-amber-400">
+                Precio de desbloqueo en KOIN:
+              </span>
+              <div className="relative w-36">
                 <input
                   type="number"
                   min="0.5"
                   step="0.5"
                   value={priceKoin}
                   onChange={(e) => setPriceKoin(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl py-1.5 pl-3 pr-12 text-white text-xs font-bold focus:border-rose-500 focus:outline-hidden"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl py-1.5 pl-3 pr-14 text-white text-xs font-bold focus:border-rose-500 focus:outline-hidden"
                 />
                 <span className="absolute right-2.5 top-1.5 text-[10px] text-amber-400 font-bold">KOIN</span>
               </div>

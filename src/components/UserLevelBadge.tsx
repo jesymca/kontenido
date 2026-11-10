@@ -1,5 +1,6 @@
 import React from "react";
 import { cn, getVipBadgeClass } from "@/lib/utils";
+import { Bot } from "lucide-react";
 
 interface UserLevelBadgeProps {
   level: number;
@@ -8,6 +9,7 @@ interface UserLevelBadgeProps {
   vipBadgeColor?: string | null;
   role?: string;
   kycStatus?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+  isAiGenerated?: boolean | number | null;
   className?: string;
   showRoleBadge?: boolean;
 }
@@ -42,6 +44,7 @@ export default function UserLevelBadge({
   vipBadgeColor,
   role,
   kycStatus,
+  isAiGenerated,
   className,
   showRoleBadge = false,
 }: UserLevelBadgeProps) {
@@ -72,6 +75,17 @@ export default function UserLevelBadge({
           )}
         >
           {vipBadgeText}
+        </span>
+      )}
+
+      {/* Badge oficial de Contenido Creado por Inteligencia Artificial (IA) */}
+      {Boolean(isAiGenerated) && (
+        <span
+          title="El contenido multimedia de este perfil es creado o generado con Inteligencia Artificial"
+          className="inline-flex items-center gap-1 text-[10px] bg-gradient-to-r from-cyan-950/90 via-blue-950/80 to-indigo-950/90 text-cyan-300 border border-cyan-500/50 font-bold px-2 py-0.5 rounded-md shadow-sm select-none animate-pulse"
+        >
+          <Bot className="w-3 h-3 text-cyan-400 shrink-0" />
+          <span>CREADO CON IA</span>
         </span>
       )}
 

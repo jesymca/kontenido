@@ -15,7 +15,20 @@ import WalletTopupForm from "@/components/WalletTopupForm";
 import BuyVipButton from "@/components/BuyVipButton";
 import { cn, getVipBadgeClass } from "@/lib/utils";
 import Link from "next/link";
-import { Coins, Flame, ArrowUpRight, ShieldCheck, Star, Award, History, Download, Sparkles } from "lucide-react";
+import {
+  Coins,
+  Flame,
+  ArrowUpRight,
+  ShieldCheck,
+  Star,
+  Award,
+  History,
+  Download,
+  Sparkles,
+  Heart,
+  Bookmark,
+  ArrowRight,
+} from "lucide-react";
 
 /**
  * Vista de Billetera y Cuenta de Usuario (/cuenta)
@@ -198,6 +211,51 @@ export default async function CuentaPage() {
           </div>
         )}
       </div>
+
+      {/* Accesos directos a Suscripciones y Creadoras Favoritas (para Consumidores) */}
+      {user?.role !== "CREATOR" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+          <Link
+            href="/cuenta/suscripciones"
+            className="p-4 bg-slate-900 border border-slate-800 hover:border-rose-500/40 rounded-2xl flex items-center justify-between transition group shadow-md"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
+                <Heart className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-sm font-bold text-white group-hover:text-rose-400 transition block">
+                  Mis Suscripciones Activas
+                </span>
+                <span className="text-xs text-slate-400">
+                  Accede al contenido exclusivo de tus creadoras
+                </span>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-1 transition-transform" />
+          </Link>
+
+          <Link
+            href="/cuenta/favoritos"
+            className="p-4 bg-slate-900 border border-slate-800 hover:border-amber-500/40 rounded-2xl flex items-center justify-between transition group shadow-md"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                <Bookmark className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-sm font-bold text-white group-hover:text-amber-400 transition block">
+                  Mis Creadoras Favoritas
+                </span>
+                <span className="text-xs text-slate-400">
+                  Perfiles guardados para suscribirte a futuro
+                </span>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-1 transition-transform" />
+          </Link>
+        </div>
+      )}
 
       {/* SECCIÓN EXCLUSIVA DE CONSUMIDORES: RECARGAS USDT Y MEMBRESÍAS VIP */}
       {user?.role !== "CREATOR" ? (

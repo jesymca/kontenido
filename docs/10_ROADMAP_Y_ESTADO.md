@@ -24,6 +24,9 @@
 - [x] F14 — Flujo Integral de Creadora Tipo OnlyFans, KYC con Reconocimiento de Cédula (jesymca), Mensajería y Planes de Suscripción (DONE - 2026-11-08)
 - [x] F15 — CRUD de Comisiones por Nivel en SUPER_ADMIN (`/admin/comisiones`), Enlace Ancla en `/panel/pagos`, Sincronización de Nivel VIP en `/cuenta`, Navbar de Suscripciones para Consumidores y Filtro Anti-Contacto Externo (DONE - 2026-11-08)
 - [x] F16 — Cámara y Grabación WebRTC en Móvil y Escritorio (Trasera / Selfie) para Perfil, Banner, Publicaciones y KYC Cédula + Modal de Recorte Interactivo (DONE - 2026-11-09)
+- [x] F17 — Algoritmo de Me Gusta (Corazón), Favoritos para Consumidores (`/cuenta/favoritos`), Estadísticas Intuitivas (Fotos/Videos/Precio) y Muestra Gratuita (Teaser Público) (DONE - 2026-11-09)
+- [x] F18 — Transparencia de Inteligencia Artificial: Switch de Configuración de Creadora y Badge Oficial "CREADO CON IA" (DONE - 2026-11-09)
+- [x] F19 — Optimización Integral de Metadatos SEO, Open Graph 1200x630 (WhatsApp, Telegram, Instagram, Twitter), Favicons PNG/ICO, Robots.txt, Sitemap.xml y PWA Manifest (DONE - 2026-11-09)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -181,6 +184,52 @@
     - Las creadoras pueden tomarse fotos o grabarse en video directamente desde el teléfono y agregarlos al post.
   - **Integración en Escáner KYC de Cédula y Selfie (`src/components/CedulaOcrScanner.tsx`)**:
     - Opciones de cámara en los 3 pasos de validación: Cédula Frente (Cámara trasera para OCR automático con Tesseract.js), Cédula Reverso y Selfie con Cédula en Mano (Cámara frontal / selfie).
+- **F17 — Algoritmo de Me Gusta (Corazón), Favoritos para Consumidores, Métricas Intuitivas de Contenido y Muestra Gratuita (DONE - 2026-11-09)**:
+  - **Algoritmo de Posicionamiento por "Me Gusta" (Likes)**:
+    - Tablas `profile_likes` y columna `profiles.likes_count` para ordenar los perfiles de mayor a menor popularidad.
+    - En la Landing Page (`src/app/page.tsx`), las creadoras se posicionan según su volumen de likes (`orderBy(desc(profiles.likesCount), desc(users.level))`).
+    - Componente interactivo [`ProfileInteractions.tsx`](file:///home/herrera/Descargas/kontenido/src/components/ProfileInteractions.tsx) con botón de corazón y animación inmediata para dar y quitar Me Gusta.
+  - **Módulo de Favoritos para Consumidores**:
+    - Tabla `profile_favorites` y server actions en [`src/actions/interactions.ts`](file:///home/herrera/Descargas/kontenido/src/actions/interactions.ts).
+    - Botón de "Favorito" en el perfil público para que los consumidores guarden a las creadoras que les interesan.
+    - Nueva vista dedicada [`/cuenta/favoritos`](file:///home/herrera/Descargas/kontenido/src/app/cuenta/favoritos/page.tsx) accesible desde la barra superior [`ConsumerPanelNav.tsx`](file:///home/herrera/Descargas/kontenido/src/components/ConsumerPanelNav.tsx) y desde `/cuenta`, con tarjetas interactivas de cada creadora guardada y acceso directo para suscribirse.
+  - **Métricas Intuitivas de Contenido (Fotos, Videos y Precio)**:
+    - En la cabecera de `/[username]`, en las tarjetas de la Landing Page y en `/cuenta/favoritos` se despliega de forma clara y visual:
+      - 📷 **Cantidad exacta de Fotos**.
+      - 🎥 **Cantidad exacta de Videos**.
+      - 💎 **Precio mensual en KOIN / mes**.
+      - ❤️ **Total de Me Gusta acumulados**.
+  - **Publicaciones de Muestra Gratuita (Públicas / Teaser)**:
+    - En [`SocialPostComposer.tsx`](file:///home/herrera/Descargas/kontenido/src/components/SocialPostComposer.tsx) las creadoras cuentan con un selector de 3 modos:
+      1. 🔓 **Muestra Gratuita (Público)**: Visible para cualquier visitante sin necesidad de estar suscrito (ideal para enganchar y captar nuevos clientes).
+      2. 👑 **Solo Suscriptores**: Exclusivo para miembros suscritos.
+      3. 💎 **Pago por Ver (PPV)**: Desbloqueable individualmente por X KOIN.
+    - En `/[username]`, los posts marcados como muestra gratuita se muestran desbloqueados con el distintivo `🔓 Muestra Gratuita (Público)`.
+- **F18 — Transparencia de Inteligencia Artificial: Switch de Configuración y Badge "CREADO CON IA" (DONE - 2026-11-09)**:
+  - **Base de Datos y Migración**:
+    - Se agregó el campo `is_ai_generated` (`integer not null default 0`) en la tabla `profiles` de `src/lib/db/schema.ts` y script auto-migratorio en `src/lib/db/initInteractions.ts`.
+  - **Switch en Configuración de Perfil (`src/components/ProfileForm.tsx` y `src/actions/creator.ts`)**:
+    - Sección *"6. IDENTIFICACIÓN DE CONTENIDO CREADO POR INTELIGENCIA ARTIFICIAL (IA)"* con switch moderno y etiqueta de *Transparencia IA*, permitiendo al creador declarar si su contenido o modelo es generado/asistido con IA.
+  - **Badge y Banner Oficial en Perfil Público (`src/components/UserLevelBadge.tsx` y `src/app/[username]/page.tsx`)**:
+    - Distintivo neón pulsante `[🤖 CREADO CON IA]` incorporado en `UserLevelBadge.tsx`, visible en la cabecera de perfil, tarjetas de inicio (`/`) y lista de favoritos (`/cuenta/favoritos`).
+    - Banner informativo de transparencia en la parte superior del perfil público para que los consumidores conozcan con claridad el origen del material.
+- **F19 — Optimización Integral de Metadatos SEO, Open Graph 1200x630 (WhatsApp, Telegram, Twitter, Instagram), Favicons PNG/ICO, Robots.txt, Sitemap.xml y PWA Manifest (DONE - 2026-11-09)**:
+  - **Generación de Assets de Imagen Multiformato con Sharp**:
+    - `public/og-image.png` y `public/opengraph-image.png` (1200x630): Banner oficial de alta resolución con fondo oscuro elegante, viñeta lumínica fucsia/azul, logo centrado, eslogan *"Tus fotos y videos en 1 solo clic"*, píldoras de PagoMóvil, KOIN 1:1 USDT y Binance Pay.
+    - Favicons ráster PNG requeridos por WhatsApp, Telegram, Apple iOS y Android: `favicon.ico` (48x48), `favicon-32x32.png`, `favicon-16x16.png`, `apple-touch-icon.png` (180x180), `icon-192.png` e `icon-512.png`.
+  - **Metadatos Globales en Root Layout (`src/app/layout.tsx`)**:
+    - `metadataBase` configurada con fallback a `https://kontenido.online`.
+    - Etiquetas `openGraph` (locale `es_VE`, type `website`, image 1200x630) y `twitter` (`summary_large_image`).
+    - Configuración exhaustiva de `keywords`, `authors`, `creator`, `publisher`, `robots` (max-image-preview large) y `alternates` canonical.
+  - **Metadatos Dinámicos por Perfil de Creadora (`src/app/[username]/page.tsx`)**:
+    - Función `generateMetadata({ params })` que consulta la base de datos y genera una tarjeta Open Graph personalizada con el nombre, biografía, precio en KOIN y la foto real del avatar o banner de la creadora al compartir su enlace en WhatsApp o Telegram.
+  - **SEO y Descubrimiento Técnico (`src/app/robots.ts`, `src/app/sitemap.ts`, `public/manifest.json`)**:
+    - `robots.txt`: Reglas optimizadas para Googlebot, Bingbot y bots de redes sociales (WhatsApp, TelegramBot, Twitterbot, facebookexternalhit, LinkedInBot, Slackbot, Applebot).
+    - `sitemap.xml`: Generación dinámica en tiempo real que lista la landing page, registro, login y todas las URLs de creadores activos (`https://kontenido.online/[username]`).
+    - `manifest.json`: Web App Manifest PWA con iconos adaptativos y colores de tema oficial.
+
+
+
 
 
 
