@@ -6,6 +6,7 @@ import { updateProfileAction } from "@/actions/creator";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import ImageCropModal from "@/components/ImageCropModal";
+import MediaCaptureModal from "@/components/MediaCaptureModal";
 import {
   Check,
   AlertCircle,
@@ -19,6 +20,7 @@ import {
   Smile,
   AtSign,
   Move,
+  Smartphone,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -82,6 +84,13 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
     description: string;
     type: "banner" | "avatar";
     originalFileName: string;
+  } | null>(null);
+
+  // Estados de cámara en vivo (trasera o selfie)
+  const [cameraModalData, setCameraModalData] = useState<{
+    type: "banner" | "avatar";
+    defaultFacingMode: "user" | "environment";
+    title: string;
   } | null>(null);
 
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
@@ -182,6 +191,27 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
     }
 
     setCropModalData(null);
+  };
+
+  // Manejo de captura directa de foto desde cámara del teléfono (trasera o selfie)
+  const handleCameraCapture = (file: File) => {
+    if (!cameraModalData) return;
+
+    const url = URL.createObjectURL(file);
+    const isBanner = cameraModalData.type === "banner";
+
+    setCropModalData({
+      imageSrc: url,
+      aspectRatio: isBanner ? 3 / 1 : 1,
+      title: isBanner ? "Encuadrar Foto de Portada (Banner)" : "Encuadrar Foto de Perfil (Avatar)",
+      description: isBanner
+        ? "Arrastra la foto hacia arriba/abajo y ajusta el zoom para que se vea la parte superior deseada."
+        : "Arrastra para centrar el rostro y ajusta el zoom.",
+      type: cameraModalData.type,
+      originalFileName: file.name,
+    });
+
+    setCameraModalData(null);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -288,16 +318,34 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
             </div>
           )}
 
-          <label className="absolute bottom-3 right-3 px-3 py-1.5 bg-slate-900/90 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl cursor-pointer border border-slate-700 transition flex items-center gap-1.5 shadow-md">
-            <Camera className="w-3.5 h-3.5 text-rose-400" />
-            <span>{bannerPreview || profile?.bannerKey ? "Cambiar y Encuadrar Portada" : "Subir y Encuadrar Portada"}</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleBannerSelect}
-            />
-          </label>
+          <div className="absolute bottom-3 right-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setCameraModalData({
+                  type: "banner",
+                  defaultFacingMode: "environment",
+                  title: "Tomar Foto de Portada con Cámara",
+                })
+              }
+              className="px-3 py-1.5 bg-slate-900/95 hover:bg-slate-800 text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/40 transition flex items-center gap-1.5 shadow-md"
+              title="Abrir cámara del teléfono (trasera o selfie)"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+              <span>Usar Cámara</span>
+            </button>
+
+            <label className="px-3 py-1.5 bg-slate-900/95 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl cursor-pointer border border-slate-700 transition flex items-center gap-1.5 shadow-md">
+              <Camera className="w-3.5 h-3.5 text-rose-400" />
+              <span>{bannerPreview || profile?.bannerKey ? "Galería" : "Subir Portada"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleBannerSelect}
+              />
+            </label>
+          </div>
         </div>
 
         {/* Avatar / Foto de perfil */}
@@ -315,17 +363,37 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
           </div>
 
           <div>
-            <label className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition inline-flex items-center gap-1.5 border border-slate-700">
-              <Upload className="w-3.5 h-3.5 text-rose-400" />
-              <span>{avatarPreview || profile?.avatarKey ? "Cambiar y Centrar Avatar" : "Subir y Centrar Avatar"}</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleAvatarSelect}
-              />
-            </label>
-            <p className="text-[11px] text-slate-500 mt-1">Formato cuadrado (JPG o PNG de hasta 15MB).</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() =>
+                  setCameraModalData({
+                    type: "avatar",
+                    defaultFacingMode: "user", // Por defecto selfie para avatar
+                    title: "Tomar Foto de Perfil (Selfie o Trasera)",
+                  })
+                }
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-xl text-xs font-semibold transition inline-flex items-center gap-1.5 border border-amber-500/30"
+                title="Tomar selfie o foto con la cámara del teléfono"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+                <span>Tomar con Cámara / Selfie</span>
+              </button>
+
+              <label className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition inline-flex items-center gap-1.5 border border-slate-700">
+                <Upload className="w-3.5 h-3.5 text-rose-400" />
+                <span>Galería</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarSelect}
+                />
+              </label>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Toma una selfie con la cámara frontal, usa la trasera o sube una imagen de tu galería.
+            </p>
           </div>
         </div>
       </div>
@@ -531,6 +599,17 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
           description={cropModalData.description}
           onConfirm={handleCropConfirm}
           onCancel={() => setCropModalData(null)}
+        />
+      )}
+
+      {/* Modal de captura con cámara del teléfono (trasera o selfie) */}
+      {cameraModalData && (
+        <MediaCaptureModal
+          mode="photo"
+          defaultFacingMode={cameraModalData.defaultFacingMode}
+          title={cameraModalData.title}
+          onCapture={handleCameraCapture}
+          onClose={() => setCameraModalData(null)}
         />
       )}
     </form>

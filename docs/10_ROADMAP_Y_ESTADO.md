@@ -23,6 +23,7 @@
 - [x] F13 — Estabilización Dominio de Producción (kontenido.online), NextAuth trustHost, Resiliencia Vercel y Configuración Google OAuth (DONE - 2026-11-08)
 - [x] F14 — Flujo Integral de Creadora Tipo OnlyFans, KYC con Reconocimiento de Cédula (jesymca), Mensajería y Planes de Suscripción (DONE - 2026-11-08)
 - [x] F15 — CRUD de Comisiones por Nivel en SUPER_ADMIN (`/admin/comisiones`), Enlace Ancla en `/panel/pagos`, Sincronización de Nivel VIP en `/cuenta`, Navbar de Suscripciones para Consumidores y Filtro Anti-Contacto Externo (DONE - 2026-11-08)
+- [x] F16 — Cámara y Grabación WebRTC en Móvil y Escritorio (Trasera / Selfie) para Perfil, Banner, Publicaciones y KYC Cédula + Modal de Recorte Interactivo (DONE - 2026-11-09)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -167,6 +168,20 @@
     - Se creó la página `/cuenta/suscripciones` (`src/app/cuenta/suscripciones/page.tsx`) con tarjetas detalladas de todos los perfiles suscritos.
   - **Filtro Anti-Contacto Externo para Creadoras y Consumidores (`src/lib/contentFilter.ts`)**:
     - Bloquea en servidor (`src/actions/creator.ts`) y cliente (`ProfileForm.tsx`, `SocialPostComposer.tsx`, `CreatorChatRoom.tsx`) la publicación o envío de números telefónicos (nacionales 0412/0414/0424/0416/0426 e internacionales), correos electrónicos (estándar u ofuscados), enlaces externos y menciones a WhatsApp, Telegram, Instagram, TikTok, Zelle o PayPal.
+- **F16 — Cámara y Grabación WebRTC en Móvil y Escritorio (Trasera / Selfie) para Perfil, Banner, Publicaciones y KYC Cédula + Modal de Recorte Interactivo (DONE - 2026-11-09)**:
+  - **Componente Universal de Cámara WebRTC (`src/components/MediaCaptureModal.tsx`)**:
+    - Utiliza la API nativa `navigator.mediaDevices.getUserMedia` para permitir acceso directo a la cámara desde celulares (Android / iOS) y computadoras.
+    - Soporte completo para alternar con un botón entre **Cámara Trasera** (`facingMode: "environment"`) y **Cámara Frontal / Selfie** (`facingMode: "user"` con efecto espejo natural).
+    - Permite captura de **Fotos instantáneas** (canvas con resolución nativa de cámara) y **Grabación de Video** con temporizador en vivo (`formatTimer`), botón de detener, vista previa interactiva antes de confirmar y reintentar si se desea.
+  - **Integración en Perfil y Banner (`src/components/ProfileForm.tsx`)**:
+    - Se agregaron botones de "Usar Cámara" tanto para la Foto de Perfil / Avatar (priorizando cámara Frontal / Selfie) como para la Foto de Portada / Banner (priorizando cámara Trasera).
+    - Las fotos capturadas o seleccionadas de la galería pasan por el modal interactivo de recorte (`src/components/ImageCropModal.tsx`) permitiendo arrastrar, ajustar zoom y encuadrar la parte superior deseada de la imagen antes de subir a R2.
+  - **Integración en Creador de Publicaciones (`src/components/SocialPostComposer.tsx`)**:
+    - Se agregó el botón *"Usar Cámara (Foto o Video)"* junto a la subida de archivos de galería.
+    - Las creadoras pueden tomarse fotos o grabarse en video directamente desde el teléfono y agregarlos al post.
+  - **Integración en Escáner KYC de Cédula y Selfie (`src/components/CedulaOcrScanner.tsx`)**:
+    - Opciones de cámara en los 3 pasos de validación: Cédula Frente (Cámara trasera para OCR automático con Tesseract.js), Cédula Reverso y Selfie con Cédula en Mano (Cámara frontal / selfie).
+
 
 
 

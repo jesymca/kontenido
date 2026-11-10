@@ -13,9 +13,12 @@ import {
   Lock,
   Unlock,
   X,
+  Camera,
+  Smartphone,
 } from "lucide-react";
 import { createPostAction } from "@/actions/creator";
 import { validateNoExternalContact } from "@/lib/contentFilter";
+import MediaCaptureModal from "@/components/MediaCaptureModal";
 
 const QUICK_EMOJIS = ["🔥", "💋", "✨", "👑", "📸", "🌴", "💖", "😍", "😈", "🥂", "💎", "⭐", "🎉", "👀"];
 
@@ -33,6 +36,7 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<Array<{ url: string; type: "IMAGE" | "VIDEO"; name: string }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
@@ -71,6 +75,19 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
   const removeFile = (idx: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
     setFilePreviews((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleCameraCapture = (file: File) => {
+    setFiles((prev) => [...prev, file]);
+    const isVid = file.type.startsWith("video/");
+    setFilePreviews((prev) => [
+      ...prev,
+      {
+        url: URL.createObjectURL(file),
+        type: isVid ? "VIDEO" : "IMAGE",
+        name: file.name,
+      },
+    ]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -298,11 +315,21 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
           </div>
         )}
 
-        {/* Selector de Fotos y Videos */}
-        <div className="flex items-center gap-3 pt-1">
-          <label className="flex-1 py-3 px-4 border border-dashed border-slate-800 hover:border-slate-700 bg-slate-950/60 rounded-2xl text-center cursor-pointer transition flex items-center justify-center gap-2 text-xs text-slate-300 font-semibold">
+        {/* Selector de Fotos y Videos con opción de Cámara Móvil */}
+        <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+          <button
+            type="button"
+            onClick={() => setShowCameraModal(true)}
+            className="w-full sm:w-auto px-5 py-3 bg-slate-950/80 hover:bg-slate-800 text-amber-300 hover:text-white rounded-2xl border border-amber-500/40 transition flex items-center justify-center gap-2 text-xs font-bold shadow-md shrink-0"
+            title="Abrir cámara del teléfono para foto o video"
+          >
+            <Smartphone className="w-4 h-4 text-amber-400" />
+            <span>Usar Cámara (Foto o Video)</span>
+          </button>
+
+          <label className="flex-1 w-full py-3 px-4 border border-dashed border-slate-800 hover:border-slate-700 bg-slate-950/60 rounded-2xl text-center cursor-pointer transition flex items-center justify-center gap-2 text-xs text-slate-300 font-semibold">
             <Upload className="w-4 h-4 text-rose-500" />
-            <span>{files.length > 0 ? `Agregar más fotos o videos (${files.length} seleccionados)` : "Seleccionar Fotos y Videos"}</span>
+            <span>{files.length > 0 ? `Galería (${files.length} archivos)` : "Seleccionar desde Galería / Archivos"}</span>
             <input
               type="file"
               multiple
@@ -372,6 +399,17 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
           {loading ? "Subiendo a Cloudflare R2..." : "Publicar Ahora"}
         </button>
       </form>
+
+      {/* Modal de Cámara Móvil para Fotos o Videos */}
+      {showCameraModal && (
+        <MediaCaptureModal
+          mode="both"
+          defaultFacingMode="environment"
+          title="Capturar Foto o Video con Cámara"
+          onCapture={handleCameraCapture}
+          onClose={() => setShowCameraModal(false)}
+        />
+      )}
     </div>
   );
 }

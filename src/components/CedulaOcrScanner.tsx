@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { getKycUploadUrlsAction, submitKycAction } from "@/actions/kyc";
 import { parseVenezuelanId, ParsedVenezuelanId } from "@/lib/cedulaParser";
+import MediaCaptureModal from "@/components/MediaCaptureModal";
+import { Smartphone } from "lucide-react";
 
 declare global {
   interface Window {
@@ -52,6 +54,29 @@ export default function CedulaOcrScanner() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Estados de captura de cámara (trasera vs selfie)
+  const [cameraModalData, setCameraModalData] = useState<{
+    target: "front" | "back" | "selfie";
+    defaultFacingMode: "user" | "environment";
+    title: string;
+  } | null>(null);
+
+  const handleCameraCapture = (file: File) => {
+    if (!cameraModalData) return;
+
+    if (cameraModalData.target === "front") {
+      handleFrontFileChange(file);
+    } else if (cameraModalData.target === "back") {
+      setBackFile(file);
+      setBackPreview(URL.createObjectURL(file));
+    } else if (cameraModalData.target === "selfie") {
+      setSelfieFile(file);
+      setSelfiePreview(URL.createObjectURL(file));
+    }
+
+    setCameraModalData(null);
+  };
 
   // Cargar script de Tesseract.js dinámicamente en el cliente
   useEffect(() => {
@@ -271,33 +296,69 @@ export default function CedulaOcrScanner() {
                   alt="Cédula Frente"
                   className="max-h-52 w-auto object-contain rounded-xl border border-slate-800 mb-3"
                 />
-                <label className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5">
-                  <Upload className="w-3.5 h-3.5" />
-                  Cambiar foto de frente
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(e) => handleFrontFileChange(e.target.files?.[0] || null)}
-                  />
-                </label>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <label className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5" />
+                    Cambiar foto de frente
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => handleFrontFileChange(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCameraModalData({
+                        target: "front",
+                        defaultFacingMode: "environment",
+                        title: "Tomar foto frontal de la Cédula",
+                      })
+                    }
+                    className="px-4 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    Tomar con Cámara
+                  </button>
+                </div>
               </div>
             ) : (
-              <label className="cursor-pointer block py-6">
+              <div className="py-6 flex flex-col items-center">
                 <Upload className="w-10 h-10 text-rose-500 mx-auto mb-2" />
-                <span className="text-white text-xs font-bold block">
-                  Haz clic o arrastra la foto frontal de tu cédula
+                <span className="text-white text-xs font-bold block mb-1">
+                  Foto frontal de tu cédula
                 </span>
-                <span className="text-slate-500 text-[11px] mt-1 block">
+                <span className="text-slate-500 text-[11px] mb-4 max-w-sm block">
                   El sistema leerá automáticamente tu cédula, nombre y fecha de nacimiento.
                 </span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => handleFrontFileChange(e.target.files?.[0] || null)}
-                />
-              </label>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <label className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shadow-sm">
+                    <Upload className="w-3.5 h-3.5" />
+                    Subir desde Galería / Archivos
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => handleFrontFileChange(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCameraModalData({
+                        target: "front",
+                        defaultFacingMode: "environment",
+                        title: "Tomar foto frontal de la Cédula",
+                      })
+                    }
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    Tomar con Cámara (Trasera / Selfie)
+                  </button>
+                </div>
+              </div>
             )}
 
             {ocrLoading && (
@@ -395,20 +456,36 @@ export default function CedulaOcrScanner() {
                 className="h-28 w-full object-cover rounded-xl border border-slate-800"
               />
             )}
-            <label className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition text-center flex items-center justify-center gap-1.5">
-              <Upload className="w-3.5 h-3.5" />
-              {backFile ? "Cargado ✓ Cambiar" : "Seleccionar reverso"}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] || null;
-                  setBackFile(f);
-                  if (f) setBackPreview(URL.createObjectURL(f));
-                }}
-              />
-            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className="flex-1 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition text-center flex items-center justify-center gap-1.5">
+                <Upload className="w-3.5 h-3.5" />
+                {backFile ? "Cargado ✓ Cambiar" : "Galería"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    setBackFile(f);
+                    if (f) setBackPreview(URL.createObjectURL(f));
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setCameraModalData({
+                    target: "back",
+                    defaultFacingMode: "environment",
+                    title: "Tomar foto del reverso de la Cédula",
+                  })
+                }
+                className="flex-1 px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                Cámara
+              </button>
+            </div>
           </div>
 
           {/* Selfie */}
@@ -426,20 +503,36 @@ export default function CedulaOcrScanner() {
                 className="h-28 w-full object-cover rounded-xl border border-slate-800"
               />
             )}
-            <label className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition text-center flex items-center justify-center gap-1.5">
-              <Camera className="w-3.5 h-3.5" />
-              {selfieFile ? "Cargado ✓ Cambiar" : "Seleccionar selfie"}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] || null;
-                  setSelfieFile(f);
-                  if (f) setSelfiePreview(URL.createObjectURL(f));
-                }}
-              />
-            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className="flex-1 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition text-center flex items-center justify-center gap-1.5">
+                <Upload className="w-3.5 h-3.5" />
+                {selfieFile ? "Cargado ✓ Cambiar" : "Galería"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    setSelfieFile(f);
+                    if (f) setSelfiePreview(URL.createObjectURL(f));
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setCameraModalData({
+                    target: "selfie",
+                    defaultFacingMode: "user",
+                    title: "Tomar Selfie con Cédula en Mano",
+                  })
+                }
+                className="flex-1 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Selfie
+              </button>
+            </div>
           </div>
         </div>
 
@@ -452,6 +545,16 @@ export default function CedulaOcrScanner() {
           {submitting ? "Cifrando y subiendo a R2 Privado..." : "Enviar Validación de Identidad"}
         </button>
       </form>
+
+      {cameraModalData && (
+        <MediaCaptureModal
+          onClose={() => setCameraModalData(null)}
+          onCapture={handleCameraCapture}
+          mode="photo"
+          defaultFacingMode={cameraModalData.defaultFacingMode}
+          title={cameraModalData.title}
+        />
+      )}
     </div>
   );
 }
