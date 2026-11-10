@@ -27,6 +27,7 @@
 - [x] F17 — Algoritmo de Me Gusta (Corazón), Favoritos para Consumidores (`/cuenta/favoritos`), Estadísticas Intuitivas (Fotos/Videos/Precio) y Muestra Gratuita (Teaser Público) (DONE - 2026-11-09)
 - [x] F18 — Transparencia de Inteligencia Artificial: Switch de Configuración de Creadora y Badge Oficial "CREADO CON IA" (DONE - 2026-11-09)
 - [x] F19 — Optimización Integral de Metadatos SEO, Open Graph 1200x630 (WhatsApp, Telegram, Instagram, Twitter), Favicons PNG/ICO, Robots.txt, Sitemap.xml y PWA Manifest (DONE - 2026-11-09)
+- [x] F20 — Corrección y Sincronización Estricta de Esquema en Turso para `/admin/usuarios` + Resiliencia con Fallback (DONE - 2026-11-09)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -227,6 +228,15 @@
     - `robots.txt`: Reglas optimizadas para Googlebot, Bingbot y bots de redes sociales (WhatsApp, TelegramBot, Twitterbot, facebookexternalhit, LinkedInBot, Slackbot, Applebot).
     - `sitemap.xml`: Generación dinámica en tiempo real que lista la landing page, registro, login y todas las URLs de creadores activos (`https://kontenido.online/[username]`).
     - `manifest.json`: Web App Manifest PWA con iconos adaptativos y colores de tema oficial.
+- **F20 — Corrección y Sincronización Estricta de Esquema en Turso para `/admin/usuarios` (DONE - 2026-11-09)**:
+  - **Diagnóstico del Error 500 (`A server error occurred`)**:
+    - Al consultar `/admin/usuarios`, Drizzle ORM ejecutaba `findMany` con relaciones `with: { profile: true, posts: { with: { media: true } } }`.
+    - La base de datos remota de Turso no tenía aplicadas aún las nuevas columnas añadidas en el código TypeScript (`likes_count` e `is_ai_generated` en `profiles`, e `is_public_teaser` en `posts`), ni las tablas `profile_likes` y `profile_favorites`, provocando la excepción fatal de LibSQL `SQLITE_ERROR: no such column`.
+  - **Acciones Correctivas**:
+    - Se ejecutó la migración directa con LibSQL sobre Turso creando las tablas faltantes y ejecutando los `ALTER TABLE` para `likes_count`, `is_ai_generated` e `is_public_teaser`, junto a sus índices correspondientes.
+    - Se protegió `src/app/admin/usuarios/page.tsx` con manejo de errores `try / catch` resiliente y llamada proactiva a `ensureInteractionsSchema()`, evitando que cualquier anomalía de red o consulta tumbe la pantalla completa.
+    - Se verificó la consulta en vivo retornando los usuarios exitosamente.
+
 
 
 
