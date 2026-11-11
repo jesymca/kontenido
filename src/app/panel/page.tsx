@@ -343,7 +343,10 @@ export default async function PanelPage() {
           </span>
         </div>
 
-        <SocialPostComposer isKycApproved={isKycApproved} />
+        <SocialPostComposer
+          isKycApproved={isKycApproved}
+          username={session.user.username}
+        />
       </div>
 
       {/* Listado de Publicaciones del Creador */}

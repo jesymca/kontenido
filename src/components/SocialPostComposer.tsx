@@ -16,19 +16,22 @@ import {
   Camera,
   Smartphone,
   Globe,
+  Check,
 } from "lucide-react";
 import { createPostAction } from "@/actions/creator";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
+import { watermarkImageFile } from "@/lib/watermarkClient";
 
 const QUICK_EMOJIS = ["🔥", "💋", "✨", "👑", "📸", "🌴", "💖", "😍", "😈", "🥂", "💎", "⭐", "🎉", "👀"];
 
 interface Props {
   onSuccess?: () => void;
   isKycApproved?: boolean;
+  username?: string;
 }
 
-export default function SocialPostComposer({ onSuccess, isKycApproved = false }: Props) {
+export default function SocialPostComposer({ onSuccess, isKycApproved = false, username }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -124,7 +127,20 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
       const uploadedMedia: any[] = [];
 
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+        let file = files[i];
+        const isImage = file.type.startsWith("image/");
+
+        // Firmar fotos automáticamente con https://www.kontenido.online/{usuario}
+        // manteniendo al 100% la perspectiva nativa (vertical u horizontal)
+        if (isImage && username) {
+          setProgress(`Firmando foto ${i + 1} de ${files.length} con https://www.kontenido.online/${username}...`);
+          try {
+            file = await watermarkImageFile(file, username);
+          } catch (wErr) {
+            console.warn("Aviso al firmar foto con marca de agua:", wErr);
+          }
+        }
+
         setProgress(`Subiendo archivo ${i + 1} de ${files.length} directamente a R2...`);
 
         // 1. Obtener URL prefirmada de R2
@@ -287,28 +303,44 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false }:
           )}
         </div>
 
-        {/* Previsualización de archivos seleccionados */}
+        {/* Previsualización de archivos seleccionados preservando perspectiva vertical/horizontal */}
         {filePreviews.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
             {filePreviews.map((preview, idx) => (
               <div
                 key={idx}
-                className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 aspect-video flex items-center justify-center group"
+                className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 min-h-[160px] max-h-[240px] flex items-center justify-center p-1.5 group"
               >
                 {preview.type === "VIDEO" ? (
-                  <video src={preview.url} className="w-full h-full object-cover" />
+                  <video
+                    src={preview.url}
+                    controls
+                    className="max-h-[220px] w-auto max-w-full object-contain rounded-xl"
+                  />
                 ) : (
-                  <img src={preview.url} alt={preview.name} className="w-full h-full object-cover" />
+                  <img
+                    src={preview.url}
+                    alt={preview.name}
+                    className="max-h-[220px] w-auto max-w-full object-contain rounded-xl"
+                  />
                 )}
 
-                <div className="absolute top-1.5 left-1.5 bg-slate-950/80 px-2 py-0.5 rounded-md text-[10px] text-white font-semibold">
+                <div className="absolute top-2 left-2 bg-slate-950/85 px-2 py-0.5 rounded-md text-[10px] text-white font-semibold backdrop-blur-xs border border-slate-800/80">
                   {preview.type === "VIDEO" ? "Video" : "Foto"}
                 </div>
+
+                {/* Badge de firmado con URL de la creadora */}
+                {username && (
+                  <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md text-[9px] font-bold bg-slate-950/90 text-rose-300 border border-rose-500/30 backdrop-blur-xs flex items-center gap-1 shadow-sm pointer-events-none">
+                    <Sparkles className="w-2.5 h-2.5 text-rose-400" />
+                    kontenido.online/{username}
+                  </span>
+                )}
 
                 <button
                   type="button"
                   onClick={() => removeFile(idx)}
-                  className="absolute top-1.5 right-1.5 p-1 bg-red-600/90 hover:bg-red-600 text-white rounded-full transition opacity-90 group-hover:opacity-100"
+                  className="absolute top-2 right-2 p-1 bg-red-600/90 hover:bg-red-600 text-white rounded-full transition opacity-90 group-hover:opacity-100 shadow-md"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>

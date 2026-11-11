@@ -484,6 +484,14 @@ export default async function PublicProfilePage({ params }: PageProps) {
                               />
                             )}
 
+                            {/* Firma digital visible con la URL de la creadora */}
+                            <div className="absolute bottom-4 right-4 z-20 pointer-events-none select-none">
+                              <span className="px-3 py-1.5 rounded-xl bg-slate-950/85 border border-rose-500/40 text-rose-300 font-bold text-[11px] backdrop-blur-md flex items-center gap-1.5 shadow-xl">
+                                <Sparkles className="w-3.5 h-3.5 text-rose-400" />
+                                https://www.kontenido.online/{creator.username}
+                              </span>
+                            </div>
+
                             {/* Botón de descarga: Exclusivo para usuarios VIP con permiso o Super Admin */}
                             {userCanDownload && (
                               <div className="w-full flex justify-end mt-3">

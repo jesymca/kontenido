@@ -44,7 +44,10 @@ export default async function NuevoPostPage() {
           </div>
         </div>
 
-        <SocialPostComposer isKycApproved={currentUser?.kycStatus === "APPROVED"} />
+        <SocialPostComposer
+          isKycApproved={currentUser?.kycStatus === "APPROVED"}
+          username={session.user.username}
+        />
       </div>
     </div>
   );

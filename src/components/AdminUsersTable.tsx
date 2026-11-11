@@ -17,6 +17,10 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  ShieldCheck,
+  Clock,
+  AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -26,6 +30,8 @@ interface UserItem {
   email: string;
   role: "SUPER_ADMIN" | "CREATOR" | "CONSUMER" | "AGENCY";
   status: "PENDING" | "ACTIVE" | "SUSPENDED";
+  kycStatus: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+  birthDate?: string | null;
   level: number;
   vipMembershipId?: string | null;
   allowDownload: number;
@@ -55,6 +61,8 @@ interface Props {
 export default function AdminUsersTable({ users, memberships }: Props) {
   const [search, setSearch] = useState("");
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [selectedKycStatus, setSelectedKycStatus] = useState<string>("NONE");
+  const [selectedBirthDate, setSelectedBirthDate] = useState<string>("");
   const [contentModalUser, setContentModalUser] = useState<UserItem | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -172,6 +180,7 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                 <th className="py-3.5 px-4">Correo</th>
                 <th className="py-3.5 px-4">Rol</th>
                 <th className="py-3.5 px-4">Estado</th>
+                <th className="py-3.5 px-4">Validación KYC</th>
                 <th className="py-3.5 px-4">Descarga VIP</th>
                 <th className="py-3.5 px-4">Perfil & Contenido</th>
                 <th className="py-3.5 px-4 text-right">Acciones</th>
@@ -224,6 +233,29 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                         </span>
                       )}
                     </td>
+                    {/* Estado de Identidad y Mayoría de Edad (KYC) */}
+                    <td className="py-3.5 px-4">
+                      {u.kycStatus === "APPROVED" && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 w-fit">
+                          <ShieldCheck className="w-3 h-3 text-emerald-400" /> Verificada (≥ 18)
+                        </span>
+                      )}
+                      {u.kycStatus === "PENDING" && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1 w-fit animate-pulse">
+                          <Clock className="w-3 h-3 text-amber-400" /> En Revisión
+                        </span>
+                      )}
+                      {u.kycStatus === "REJECTED" && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1 w-fit">
+                          <AlertCircle className="w-3 h-3 text-red-400" /> Rechazada
+                        </span>
+                      )}
+                      {(!u.kycStatus || u.kycStatus === "NONE") && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800/80 text-slate-400 border border-slate-700/60 flex items-center gap-1 w-fit">
+                          Sin Validar
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3.5 px-4">
                       {u.allowDownload === 1 ? (
                         <span className="text-emerald-400 flex items-center gap-1 font-semibold text-[11px]">
@@ -270,10 +302,15 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setEditingUser(u)}
+                          onClick={() => {
+                            setEditingUser(u);
+                            setSelectedKycStatus(u.kycStatus || "NONE");
+                            setSelectedBirthDate(u.birthDate || "");
+                          }}
                           className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-                          title="Editar usuario"
+                          title="Editar usuario y validar KYC"
                         >
+                          <Edit2 className="w-4 h-4" />
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
@@ -438,6 +475,79 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Sección: Validación Directa de Identidad y Mayoría de Edad (KYC) */}
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                    <div>
+                      <span className="text-xs font-bold text-white block">
+                        Validación de Identidad y Mayoría de Edad
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Validación directa con privilegios de SUPER_ADMIN
+                      </span>
+                    </div>
+                  </div>
+                  {selectedKycStatus === "APPROVED" && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Aprobada (≥ 18)
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Estado KYC
+                    </label>
+                    <select
+                      name="kycStatus"
+                      value={selectedKycStatus}
+                      onChange={(e) => setSelectedKycStatus(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:border-rose-500 focus:outline-hidden"
+                    >
+                      <option value="APPROVED">APPROVED (Validada y Mayor de Edad)</option>
+                      <option value="PENDING">PENDING (En Revisión)</option>
+                      <option value="REJECTED">REJECTED (Rechazada)</option>
+                      <option value="NONE">NONE (Sin Validar)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Fecha de Nacimiento (Mayoría de Edad)
+                    </label>
+                    <input
+                      name="birthDate"
+                      type="date"
+                      value={selectedBirthDate}
+                      onChange={(e) => setSelectedBirthDate(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:border-rose-500 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                {/* Botón de aprobación instantánea de KYC */}
+                {selectedKycStatus !== "APPROVED" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedKycStatus("APPROVED");
+                    }}
+                    className="w-full py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    Validar y Aprobar Mayoría de Edad de Forma Directa
+                  </button>
+                ) : (
+                  <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-[11px] text-emerald-300 flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Esta usuaria quedará registrada con Identidad y Mayoría de Edad confirmadas al guardar.</span>
+                  </div>
+                )}
               </div>
 
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">

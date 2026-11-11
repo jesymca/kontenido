@@ -57,7 +57,7 @@ export default function MediaCaptureModal({
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Iniciar la cámara según el modo (facingMode)
+  // Iniciar la cámara según el modo (facingMode) respetando la orientación vertical/horizontal
   const startCamera = async (facing: "user" | "environment") => {
     setError(null);
     if (stream) {
@@ -65,11 +65,15 @@ export default function MediaCaptureModal({
     }
 
     try {
+      // Detectar orientación del viewport (vertical para smartphones, horizontal para monitores)
+      const isPortrait = typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: facing },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          aspectRatio: isPortrait ? { ideal: 9 / 16 } : { ideal: 16 / 9 },
+          width: isPortrait ? { ideal: 1080 } : { ideal: 1920 },
+          height: isPortrait ? { ideal: 1920 } : { ideal: 1080 },
         },
         audio: activeTab === "video",
       };
@@ -110,14 +114,16 @@ export default function MediaCaptureModal({
     setFacingMode(nextMode);
   };
 
-  // Tomar fotografía
+  // Tomar fotografía preservando la relación de aspecto y orientación nativa
   const handleTakePhoto = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
 
+    // Preservar exactamente las dimensiones nativas del video (vertical u horizontal)
+    const isPortrait = typeof window !== "undefined" && window.innerHeight > window.innerWidth;
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    canvas.width = video.videoWidth || (isPortrait ? 1080 : 1920);
+    canvas.height = video.videoHeight || (isPortrait ? 1920 : 1080);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -141,7 +147,7 @@ export default function MediaCaptureModal({
         }
       },
       "image/jpeg",
-      0.92
+      0.95
     );
   };
 
@@ -288,21 +294,22 @@ export default function MediaCaptureModal({
             </div>
           )}
 
-          <div className="w-full relative aspect-[4/3] sm:aspect-video rounded-2xl overflow-hidden bg-black border border-slate-800 flex items-center justify-center">
+          <div className="w-full relative min-h-[320px] max-h-[62vh] rounded-2xl overflow-hidden bg-black border border-slate-800 flex items-center justify-center p-1">
             {capturedPreview ? (
               capturedPreview.type === "photo" ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={capturedPreview.url}
                   alt="Captura"
-                  className="w-full h-full object-cover"
+                  className="max-h-[60vh] w-auto max-w-full object-contain rounded-xl"
                 />
               ) : (
                 <video
                   src={capturedPreview.url}
                   controls
                   autoPlay
-                  className="w-full h-full object-cover"
+                  playsInline
+                  className="max-h-[60vh] w-auto max-w-full object-contain rounded-xl"
                 />
               )
             ) : (
@@ -311,7 +318,7 @@ export default function MediaCaptureModal({
                 playsInline
                 muted
                 autoPlay
-                className={`w-full h-full object-cover ${
+                className={`max-h-[60vh] w-auto max-w-full object-contain rounded-xl ${
                   facingMode === "user" ? "scale-x-[-1]" : ""
                 }`}
               />

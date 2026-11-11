@@ -123,7 +123,8 @@ export async function rejectTopupAction(txId: string, notes: string) {
 }
 
 /**
- * CRUD Usuarios: Actualizar rol, estado, nivel manual y permiso de descarga VIP
+ * CRUD Usuarios: Actualizar rol, estado, nivel manual, permiso de descarga VIP
+ * y VALIDACIÓN DIRECTA DE IDENTIDAD Y MAYORÍA DE EDAD (KYC) para SUPER_ADMIN
  */
 export async function updateAdminUserAction(formData: FormData): Promise<{ success?: boolean; error?: string }> {
   try {
@@ -136,26 +137,190 @@ export async function updateAdminUserAction(formData: FormData): Promise<{ succe
     const allowDownload = formData.get("allowDownload") === "1" ? 1 : 0;
     const vipMembershipId = (formData.get("vipMembershipId") as string) || null;
     const suspensionReason = (formData.get("suspensionReason") as string) || null;
+    const kycStatus = (formData.get("kycStatus") as "NONE" | "PENDING" | "APPROVED" | "REJECTED") || null;
+    const birthDate = (formData.get("birthDate") as string)?.trim() || null;
 
+    const now = new Date().toISOString();
+
+    const updatePayload: any = {
+      role,
+      status: kycStatus === "APPROVED" && status === "PENDING" ? "ACTIVE" : status,
+      level: Math.min(100, Math.max(0, level)),
+      allowDownload,
+      vipMembershipId,
+      suspensionReason: status === "SUSPENDED" ? suspensionReason : null,
+      updatedAt: now,
+    };
+
+    if (kycStatus) {
+      updatePayload.kycStatus = kycStatus;
+    }
+    if (birthDate !== undefined) {
+      updatePayload.birthDate = birthDate;
+    }
+
+    await db
+      .update(users)
+      .set(updatePayload)
+      .where(eq(users.id, userId));
+
+    // Si el SUPER_ADMIN valida directamente la identidad y mayoría de edad como APPROVED:
+    if (kycStatus === "APPROVED") {
+      const existingDocs = await db.query.kycDocuments.findMany({
+        where: eq(kycDocuments.userId, userId),
+      });
+
+      if (existingDocs.length > 0) {
+        await db
+          .update(kycDocuments)
+          .set({
+            status: "APPROVED",
+            ageVerified: 1,
+            reviewerId: admin.id,
+            reviewedAt: now,
+            extractedBirthDate: birthDate || undefined,
+          })
+          .where(eq(kycDocuments.userId, userId));
+      } else {
+        // Crear registro oficial de validación directa si no había documento previo
+        await db.insert(kycDocuments).values({
+          id: crypto.randomUUID(),
+          userId,
+          documentType: "CEDULA_VE",
+          frontKey: "admin_direct_verification",
+          backKey: "admin_direct_verification",
+          selfieKey: "admin_direct_verification",
+          extractedCedula: "VALIDADO_DIRECTO_SUPER_ADMIN",
+          extractedBirthDate: birthDate,
+          ageVerified: 1,
+          status: "APPROVED",
+          reviewerId: admin.id,
+          reviewedAt: now,
+          createdAt: now,
+        });
+      }
+
+      // Registrar auditoría de validación directa
+      await db.insert(auditLog).values({
+        id: crypto.randomUUID(),
+        actorId: admin.id,
+        action: "SUPER_ADMIN_DIRECT_KYC_APPROVAL",
+        entity: "users",
+        entityId: userId,
+        meta: JSON.stringify({
+          role,
+          kycStatus: "APPROVED",
+          birthDate,
+          validatedDirectlyInUserEditor: true,
+        }),
+        ipAddress: "127.0.0.1",
+        createdAt: now,
+      });
+    } else if (kycStatus === "REJECTED") {
+      await db
+        .update(kycDocuments)
+        .set({
+          status: "REJECTED",
+          rejectionReason: "Rechazado directamente por SUPER_ADMIN en edición de usuario",
+          reviewerId: admin.id,
+          reviewedAt: now,
+        })
+        .where(eq(kycDocuments.userId, userId));
+    }
+
+    revalidatePath("/admin/usuarios");
+    revalidatePath("/admin/kyc");
+    revalidatePath("/panel");
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Error al actualizar usuario." };
+  }
+}
+
+/**
+ * Validación y aprobación directa de Identidad y Mayoría de Edad (1-click) desde SUPER_ADMIN
+ */
+export async function directValidateKycAction(
+  userId: string,
+  kycStatus: "APPROVED" | "REJECTED",
+  birthDate?: string
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    const admin = await requireSuperAdmin();
     const now = new Date().toISOString();
 
     await db
       .update(users)
       .set({
-        role,
-        status,
-        level: Math.min(100, Math.max(0, level)),
-        allowDownload,
-        vipMembershipId,
-        suspensionReason: status === "SUSPENDED" ? suspensionReason : null,
+        kycStatus,
+        status: kycStatus === "APPROVED" ? "ACTIVE" : undefined,
+        birthDate: birthDate || undefined,
         updatedAt: now,
       })
       .where(eq(users.id, userId));
 
+    if (kycStatus === "APPROVED") {
+      const existingDocs = await db.query.kycDocuments.findMany({
+        where: eq(kycDocuments.userId, userId),
+      });
+
+      if (existingDocs.length > 0) {
+        await db
+          .update(kycDocuments)
+          .set({
+            status: "APPROVED",
+            ageVerified: 1,
+            reviewerId: admin.id,
+            reviewedAt: now,
+            extractedBirthDate: birthDate || undefined,
+          })
+          .where(eq(kycDocuments.userId, userId));
+      } else {
+        await db.insert(kycDocuments).values({
+          id: crypto.randomUUID(),
+          userId,
+          documentType: "CEDULA_VE",
+          frontKey: "admin_direct_verification",
+          backKey: "admin_direct_verification",
+          selfieKey: "admin_direct_verification",
+          extractedCedula: "VALIDADO_DIRECTO_SUPER_ADMIN",
+          extractedBirthDate: birthDate,
+          ageVerified: 1,
+          status: "APPROVED",
+          reviewerId: admin.id,
+          reviewedAt: now,
+          createdAt: now,
+        });
+      }
+
+      await db.insert(auditLog).values({
+        id: crypto.randomUUID(),
+        actorId: admin.id,
+        action: "SUPER_ADMIN_DIRECT_KYC_APPROVAL",
+        entity: "users",
+        entityId: userId,
+        meta: JSON.stringify({ kycStatus: "APPROVED", birthDate }),
+        ipAddress: "127.0.0.1",
+        createdAt: now,
+      });
+    } else {
+      await db
+        .update(kycDocuments)
+        .set({
+          status: "REJECTED",
+          rejectionReason: "Rechazado directamente por SUPER_ADMIN",
+          reviewerId: admin.id,
+          reviewedAt: now,
+        })
+        .where(eq(kycDocuments.userId, userId));
+    }
+
     revalidatePath("/admin/usuarios");
+    revalidatePath("/admin/kyc");
+    revalidatePath("/panel");
     return { success: true };
   } catch (err: any) {
-    return { error: err.message || "Error al actualizar usuario." };
+    return { error: err.message || "Error al validar KYC directamente." };
   }
 }
 

@@ -28,6 +28,7 @@
 - [x] F18 — Transparencia de Inteligencia Artificial: Switch de Configuración de Creadora y Badge Oficial "CREADO CON IA" (DONE - 2026-11-09)
 - [x] F19 — Optimización Integral de Metadatos SEO, Open Graph 1200x630 (WhatsApp, Telegram, Instagram, Twitter), Favicons PNG/ICO, Robots.txt, Sitemap.xml y PWA Manifest (DONE - 2026-11-09)
 - [x] F20 — Corrección y Sincronización Estricta de Esquema en Turso para `/admin/usuarios` + Resiliencia con Fallback (DONE - 2026-11-09)
+- [x] F21 — Firma Digital de Contenidos (`https://www.kontenido.online/{usuario}`), Validación Directa de KYC y Mayoría de Edad en SUPER_ADMIN, Modal Lightbox de Documentos y Preservación Estricta de Perspectiva Vertical (DONE - 2026-11-11)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -237,10 +238,17 @@
     - Se protegió `src/app/admin/usuarios/page.tsx` con manejo de errores `try / catch` resiliente y llamada proactiva a `ensureInteractionsSchema()`, evitando que cualquier anomalía de red o consulta tumbe la pantalla completa.
     - Se verificó la consulta en vivo retornando los usuarios exitosamente.
 
-
-
-
-
-
-
-
+- **F21 — Firma Digital de Contenidos (`https://www.kontenido.online/{usuario}`), Validación Directa de KYC y Mayoría de Edad en SUPER_ADMIN, Modal Lightbox de Documentos y Preservación Estricta de Perspectiva Vertical (DONE - 2026-11-11)**:
+  - **Firma Digital de Contenidos Multimedia**:
+    - Implementado `src/lib/watermarkClient.ts`: Firmado automático en el cliente (Browser HTML5 Canvas) de fotos antes de su subida a Cloudflare R2 con la URL oficial de la creadora (`https://www.kontenido.online/{usuario}`).
+    - Implementado `src/lib/watermarkServer.ts`: Utilidades de servidor con Sharp (`.rotate()` para EXIF y overlay SVG) y FFmpeg (filtro `drawtext` posicionado dinámicamente) + API route `POST /api/media/watermark`.
+    - Agregada pastilla permanente no interactiva de firma digital en reproductores y visores de publicaciones (`/[username]` y `CreatorContentModal.tsx`).
+  - **Validación Directa de KYC y Mayoría de Edad en SUPER_ADMIN**:
+    - En `/admin/usuarios`, el modal **Editar Usuario** (`AdminUsersTable.tsx`) incorpora la sección dedicada *Validación de Identidad y Mayoría de Edad*, permitiendo al SUPER_ADMIN validar y constatar de forma directa (1-clic) que la usuaria tiene 18 años o más.
+    - Actualiza `users.kycStatus = 'APPROVED'`, `users.birthDate`, estado `ACTIVE`, sincroniza la tabla `kyc_documents` y deja constancia formal en `audit_log` (`SUPER_ADMIN_DIRECT_KYC_APPROVAL`).
+    - Columna de estado KYC visible directamente en la tabla de usuarios con distintivos visuales (`Verificada (≥ 18)`, `En Revisión`, `Rechazada`, `Sin Validar`).
+  - **Modal Lightbox de Fotos en Validación KYC (`/admin/kyc`)**:
+    - En `AdminKycReview.tsx`, al hacer clic en cualquiera de las 3 fotografías (Frente, Reverso, Selfie) se despliega un visor modal a pantalla completa con herramientas de zoom (+, -, 100%), rotación de 90° en 90° (`R`), navegación con flechas (`←` / `→`), atajo de escape y datos extraídos en cabecera.
+  - **Preservación Estricta de Perspectiva y Orientación (Vertical vs Horizontal)**:
+    - En `MediaCaptureModal.tsx`: Restricciones dinámicas de cámara WebRTC para orientación vertical (9:16) en smartphones y horizontal (16:9) en desktop. Dimensiones del canvas ajustadas a `video.videoWidth` y `video.videoHeight` reales.
+    - Eliminado el forzado `aspect-video object-cover` en `SocialPostComposer.tsx`, `CreatorContentModal.tsx`, `CedulaOcrScanner.tsx` y `MediaCaptureModal.tsx`, reemplazado por `object-contain` y dimensiones flexibles para que fotos y videos verticales conserven su relación de aspecto real sin recortes.

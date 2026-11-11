@@ -87,14 +87,14 @@ export default function CreatorContentModal({
                   key={post.id}
                   className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-lg flex flex-col justify-between hover:border-slate-700 transition"
                 >
-                  {/* Visualización de Media */}
-                  <div className="relative aspect-video bg-slate-900 flex items-center justify-center overflow-hidden">
+                  {/* Visualización de Media preservando aspecto vertical u horizontal */}
+                  <div className="relative min-h-[240px] max-h-[380px] bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden p-2">
                     {mediaUrl ? (
                       firstMedia?.type === "VIDEO" ? (
                         <video
                           src={mediaUrl}
                           controls
-                          className="w-full h-full object-cover"
+                          className="max-h-[360px] w-auto max-w-full object-contain rounded-lg"
                           preload="metadata"
                         />
                       ) : (
@@ -102,7 +102,7 @@ export default function CreatorContentModal({
                         <img
                           src={mediaUrl}
                           alt={post.title}
-                          className="w-full h-full object-cover"
+                          className="max-h-[360px] w-auto max-w-full object-contain rounded-lg"
                         />
                       )
                     ) : (
@@ -111,6 +111,14 @@ export default function CreatorContentModal({
                         <span className="text-[11px]">Sin archivo multimedia</span>
                       </div>
                     )}
+
+                    {/* Firma oficial de la creadora */}
+                    <div className="absolute bottom-2 right-2 pointer-events-none select-none">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-950/85 border border-rose-500/30 text-rose-300 font-bold text-[9px] backdrop-blur-xs flex items-center gap-1 shadow-sm">
+                        <Sparkles className="w-2.5 h-2.5 text-rose-400" />
+                        kontenido.online/{username}
+                      </span>
+                    </div>
 
                     {/* Badge de tipo de contenido */}
                     <div className="absolute top-2 left-2 flex items-center gap-1">

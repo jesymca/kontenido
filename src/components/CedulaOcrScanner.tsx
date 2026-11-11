@@ -450,11 +450,13 @@ export default function CedulaOcrScanner() {
               <span className="text-[11px] text-slate-500">Fotografía posterior de tu documento.</span>
             </div>
             {backPreview && (
-              <img
-                src={backPreview}
-                alt="Reverso"
-                className="h-28 w-full object-cover rounded-xl border border-slate-800"
-              />
+              <div className="bg-slate-900/50 rounded-xl p-1 flex items-center justify-center">
+                <img
+                  src={backPreview}
+                  alt="Reverso"
+                  className="max-h-44 w-auto max-w-full object-contain rounded-lg border border-slate-800"
+                />
+              </div>
             )}
             <div className="flex flex-col sm:flex-row gap-2">
               <label className="flex-1 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition text-center flex items-center justify-center gap-1.5">
@@ -497,11 +499,13 @@ export default function CedulaOcrScanner() {
               </span>
             </div>
             {selfiePreview && (
-              <img
-                src={selfiePreview}
-                alt="Selfie"
-                className="h-28 w-full object-cover rounded-xl border border-slate-800"
-              />
+              <div className="bg-slate-900/50 rounded-xl p-1 flex items-center justify-center">
+                <img
+                  src={selfiePreview}
+                  alt="Selfie"
+                  className="max-h-44 w-auto max-w-full object-contain rounded-lg border border-slate-800"
+                />
+              </div>
             )}
             <div className="flex flex-col sm:flex-row gap-2">
               <label className="flex-1 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition text-center flex items-center justify-center gap-1.5">
