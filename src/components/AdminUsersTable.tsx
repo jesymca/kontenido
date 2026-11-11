@@ -311,7 +311,6 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                           title="Editar usuario y validar KYC"
                         >
                           <Edit2 className="w-4 h-4" />
-                          <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
