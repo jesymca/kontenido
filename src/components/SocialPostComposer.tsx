@@ -22,6 +22,7 @@ import { createPostAction } from "@/actions/creator";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
 import { watermarkImageFile } from "@/lib/watermarkClient";
+import MediaWatermark from "@/components/MediaWatermark";
 
 const QUICK_EMOJIS = ["🔥", "💋", "✨", "👑", "📸", "🌴", "💖", "😍", "😈", "🥂", "💎", "⭐", "🎉", "👀"];
 
@@ -325,27 +326,33 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false, u
                   />
                 )}
 
-                <div className="absolute top-2 left-2 bg-slate-950/85 px-2 py-0.5 rounded-md text-[10px] text-white font-semibold backdrop-blur-xs border border-slate-800/80">
+                <div className="absolute top-2 left-2 z-30 bg-slate-950/85 px-2 py-0.5 rounded-md text-[10px] text-white font-semibold backdrop-blur-xs border border-slate-800/80">
                   {preview.type === "VIDEO" ? "Video" : "Foto"}
                 </div>
 
-                {/* Badge de firmado con URL de la creadora */}
-                {username && (
-                  <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md text-[9px] font-bold bg-slate-950/90 text-rose-300 border border-rose-500/30 backdrop-blur-xs flex items-center gap-1 shadow-sm pointer-events-none">
-                    <Sparkles className="w-2.5 h-2.5 text-rose-400" />
-                    kontenido.online/{username}
-                  </span>
-                )}
+                {/* MARCA DE AGUA SOBRE LA PREVISUALIZACIÓN */}
+                {username && <MediaWatermark username={username} showDiagonal={false} />}
 
                 <button
                   type="button"
                   onClick={() => removeFile(idx)}
-                  className="absolute top-2 right-2 p-1 bg-red-600/90 hover:bg-red-600 text-white rounded-full transition opacity-90 group-hover:opacity-100 shadow-md"
+                  className="absolute top-2 right-2 z-30 p-1 bg-red-600/90 hover:bg-red-600 text-white rounded-full transition opacity-90 group-hover:opacity-100 shadow-md"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Notificación de Marca de Agua activa */}
+        {username && (
+          <div className="p-3 bg-rose-950/40 border border-rose-500/30 rounded-2xl flex items-center gap-2.5 text-xs text-rose-200">
+            <Sparkles className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>
+              <strong>Marca de Agua de Protección:</strong> Las fotos y videos se publicarán automáticamente con la marca de agua oficial:{" "}
+              <strong className="text-white font-mono">https://www.kontenido.online/{username}</strong>.
+            </span>
           </div>
         )}
 

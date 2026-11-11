@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, ExternalLink, Image as ImageIcon, Video, Lock, Unlock, Calendar, Sparkles } from "lucide-react";
 import Link from "next/link";
+import MediaWatermark from "@/components/MediaWatermark";
 
 export interface CreatorPostModalItem {
   id: string;
@@ -112,13 +113,8 @@ export default function CreatorContentModal({
                       </div>
                     )}
 
-                    {/* Firma oficial de la creadora */}
-                    <div className="absolute bottom-2 right-2 pointer-events-none select-none">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-950/85 border border-rose-500/30 text-rose-300 font-bold text-[9px] backdrop-blur-xs flex items-center gap-1 shadow-sm">
-                        <Sparkles className="w-2.5 h-2.5 text-rose-400" />
-                        kontenido.online/{username}
-                      </span>
-                    </div>
+                    {/* MARCA DE AGUA OFICIAL KONTENIDO SOBRE LA FOTO/VIDEO */}
+                    {mediaUrl && <MediaWatermark username={username} />}
 
                     {/* Badge de tipo de contenido */}
                     <div className="absolute top-2 left-2 flex items-center gap-1">

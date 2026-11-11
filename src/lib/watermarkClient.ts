@@ -1,23 +1,25 @@
 /**
- * Utilidad de firmado y marca de agua en el cliente (Browser HTML5 Canvas)
- * Permite firmar digitalmente fotos con la URL oficial de la creadora:
+ * Utilidad de MARCA DE AGUA (Watermark) en el cliente (Browser HTML5 Canvas)
+ * Estampa permanentemente la MARCA DE AGUA oficial de la creadora sobre las fotos:
  * https://www.kontenido.online/{usuario}
  * 
- * Reglas críticas:
- * 1. Preservar estrictamente la perspectiva y orientación original (Vertical u Horizontal).
- * 2. Compatible con EXIF orientation de smartphones.
- * 3. Diseño elegante con fondo semitransparente, ícono y tipografía nítida.
+ * Reglas de protección y calidad:
+ * 1. Marca de agua diagonal central semitransparente (estilo OnlyFans / stock / anti-piratería).
+ * 2. Marca de agua tipo sello oficial en la esquina inferior con logotipo KONTENIDO.
+ * 3. Preservación estricta de la relación de aspecto original (Vertical u Horizontal).
+ * 4. Ajuste dinámico de escala según la resolución de la foto.
  */
 
 export interface WatermarkOptions {
   domain?: string; // Por defecto https://www.kontenido.online
   position?: "bottom-right" | "bottom-left" | "bottom-center";
   quality?: number; // 0.92 por defecto
+  includeDiagonal?: boolean; // True por defecto
 }
 
 /**
- * Aplica la firma digital con la URL de la creadora sobre un archivo de imagen (File)
- * y devuelve un nuevo objeto File firmado.
+ * Aplica la MARCA DE AGUA sobre un archivo de imagen (File)
+ * y devuelve un nuevo objeto File con la marca de agua incrustada.
  */
 export async function watermarkImageFile(
   file: File,
@@ -33,6 +35,7 @@ export async function watermarkImageFile(
   const watermarkText = `${domain}/${username.replace(/^@/, "")}`;
   const quality = options.quality ?? 0.92;
   const position = options.position || "bottom-right";
+  const includeDiagonal = options.includeDiagonal !== false;
 
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -43,8 +46,8 @@ export async function watermarkImageFile(
           const width = img.naturalWidth || img.width;
           const height = img.naturalHeight || img.height;
 
-          // Crear canvas con las dimensiones EXACTAS de la imagen original
-          // (Si es vertical, height > width, y se mantiene estrictamente vertical)
+          // Crear canvas con las dimensiones EXACTAS de la foto original
+          // (Si la foto es vertical, height > width, y se mantiene 100% vertical)
           const canvas = document.createElement("canvas");
           canvas.width = width;
           canvas.height = height;
@@ -55,30 +58,57 @@ export async function watermarkImageFile(
             return;
           }
 
-          // 1. Dibujar imagen base preservando aspecto
+          // 1. Dibujar la fotografía base preservando perspectiva y orientación
           ctx.drawImage(img, 0, 0, width, height);
 
-          // 2. Calcular escala dinámica del texto según resolución
-          // Para imágenes 1080p -> fontSize ~24px; para 4K -> fontSize ~40px; mínimo 14px
           const minDim = Math.min(width, height);
-          const fontSize = Math.max(14, Math.min(38, Math.round(minDim * 0.026)));
-          const paddingX = Math.round(fontSize * 0.9);
+
+          // 2. MARCA DE AGUA DIAGONAL EN EL CENTRO DE LA FOTO (Anti-recorte y Anti-piratería)
+          if (includeDiagonal) {
+            ctx.save();
+            ctx.translate(width / 2, height / 2);
+            ctx.rotate((-22 * Math.PI) / 180);
+
+            const diagonalFontSize = Math.max(18, Math.min(54, Math.round(minDim * 0.046)));
+            ctx.font = `900 ${diagonalFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            // Sombra oscura suave para garantizar legibilidad sobre fondos claros
+            ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 2;
+
+            // Borde tenue
+            ctx.lineWidth = Math.max(1, Math.round(diagonalFontSize * 0.05));
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+            ctx.strokeText(watermarkText.toUpperCase(), 0, 0);
+
+            // Relleno semitransparente
+            ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+            ctx.fillText(watermarkText.toUpperCase(), 0, 0);
+
+            ctx.restore();
+          }
+
+          // 3. MARCA DE AGUA TIPO SELLO OFICIAL EN LA ESQUINA INFERIOR
+          const fontSize = Math.max(14, Math.min(36, Math.round(minDim * 0.026)));
+          const paddingX = Math.round(fontSize * 0.95);
           const paddingY = Math.round(fontSize * 0.55);
           const borderRadius = Math.round(fontSize * 0.45);
           const margin = Math.round(minDim * 0.035);
 
           ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          ctx.textAlign = "left";
           ctx.textBaseline = "middle";
 
-          // Texto a mostrar
           const textMetrics = ctx.measureText(watermarkText);
           const textWidth = textMetrics.width;
 
-          // Ancho y alto de la pastilla/badge
-          const badgeWidth = textWidth + paddingX * 2 + fontSize * 1.1; // incluye espacio para el logo/punto
+          const badgeWidth = textWidth + paddingX * 2 + fontSize * 1.1;
           const badgeHeight = fontSize + paddingY * 2;
 
-          // Posicionamiento de la marca de agua
           let badgeX = width - badgeWidth - margin;
           if (position === "bottom-left") {
             badgeX = margin;
@@ -87,43 +117,43 @@ export async function watermarkImageFile(
           }
           const badgeY = height - badgeHeight - margin;
 
-          // Sombra suave para la pastilla
+          // Sombra de la pastilla
           ctx.save();
-          ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
-          ctx.shadowBlur = Math.round(fontSize * 0.5);
+          ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+          ctx.shadowBlur = Math.round(fontSize * 0.6);
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 2;
 
-          // Fondo de la pastilla: degradado oscuro con borde sutil
-          ctx.fillStyle = "rgba(10, 15, 30, 0.78)";
+          // Fondo semitransparente oscuro
+          ctx.fillStyle = "rgba(8, 12, 24, 0.82)";
           drawRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, borderRadius);
           ctx.fill();
 
-          // Borde sutil acentuado rosa
+          // Borde rosa de acento Kontenido
           ctx.lineWidth = Math.max(1, Math.round(fontSize * 0.06));
-          ctx.strokeStyle = "rgba(244, 63, 94, 0.45)"; // rose-500 traslúcido
+          ctx.strokeStyle = "rgba(244, 63, 94, 0.6)";
           drawRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, borderRadius);
           ctx.stroke();
           ctx.restore();
 
-          // Ícono/Punto de verificación rosa estilo Kontenido
+          // Punto de verificación rosa
           const iconRadius = Math.round(fontSize * 0.28);
           const iconCenterX = badgeX + paddingX + iconRadius;
           const iconCenterY = badgeY + badgeHeight / 2;
 
           ctx.save();
-          ctx.fillStyle = "#f43f5e"; // rose-500
+          ctx.fillStyle = "#f43f5e";
           ctx.beginPath();
           ctx.arc(iconCenterX, iconCenterY, iconRadius, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
 
-          // Texto de la firma en blanco nítido
+          // Texto de la marca de agua
           const textX = iconCenterX + iconRadius + Math.round(fontSize * 0.5);
           const textY = badgeY + badgeHeight / 2 + 1;
 
           ctx.save();
-          ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
           ctx.shadowBlur = 4;
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 1;
@@ -131,7 +161,7 @@ export async function watermarkImageFile(
           ctx.fillText(watermarkText, textX, textY);
           ctx.restore();
 
-          // 3. Exportar el nuevo archivo firmado preservando tipo MIME
+          // 4. Exportar el archivo con la marca de agua integrada
           const outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
           canvas.toBlob(
             (blob) => {
@@ -139,18 +169,18 @@ export async function watermarkImageFile(
                 resolve(file);
                 return;
               }
-              const signedFile = new File([blob], file.name, {
+              const watermarkedFile = new File([blob], file.name, {
                 type: outputType,
                 lastModified: Date.now(),
               });
-              resolve(signedFile);
+              resolve(watermarkedFile);
             },
             outputType,
             quality
           );
         } catch (err) {
-          console.error("Error al firmar imagen con marca de agua:", err);
-          resolve(file); // Fallback al archivo original si ocurre algún error
+          console.error("Error al aplicar marca de agua a imagen:", err);
+          resolve(file);
         }
       };
 
@@ -163,9 +193,6 @@ export async function watermarkImageFile(
   });
 }
 
-/**
- * Función auxiliar para dibujar rectángulos con esquinas redondeadas
- */
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
   x: number,

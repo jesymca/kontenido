@@ -5,16 +5,17 @@ import { promisify } from "util";
 const execAsync = promisify(exec);
 
 /**
- * Utilidades de servidor para firmado de medios con la URL oficial de la creadora:
+ * Utilidades de servidor para MARCA DE AGUA (Watermark) con la URL oficial de la creadora:
  * https://www.kontenido.online/{usuario}
  */
 
 export interface ServerWatermarkOptions {
   domain?: string;
+  includeDiagonal?: boolean;
 }
 
 /**
- * Firma una imagen (Buffer) usando Sharp.
+ * Aplica la MARCA DE AGUA sobre una imagen (Buffer) usando Sharp.
  * REGLA CRÍTICA: Llama siempre a .rotate() para auto-orientar según EXIF
  * garantizando que fotos verticales permanezcan verticales y no se volteen horizontalmente.
  */
@@ -25,6 +26,7 @@ export async function signImageBufferWithSharp(
 ): Promise<Buffer> {
   const domain = options.domain || "https://www.kontenido.online";
   const watermarkText = `${domain}/${username.replace(/^@/, "")}`;
+  const includeDiagonal = options.includeDiagonal !== false;
 
   // 1. Cargar imagen y auto-orientar según EXIF
   const image = sharp(imageBuffer).rotate();
@@ -36,7 +38,7 @@ export async function signImageBufferWithSharp(
   // 2. Calcular tamaño del texto relativo a la menor dimensión
   const minDim = Math.min(width, height);
   const fontSize = Math.max(16, Math.min(42, Math.round(minDim * 0.028)));
-  const paddingX = Math.round(fontSize * 0.9);
+  const paddingX = Math.round(fontSize * 0.95);
   const paddingY = Math.round(fontSize * 0.55);
   const margin = Math.round(minDim * 0.035);
 
@@ -48,14 +50,45 @@ export async function signImageBufferWithSharp(
   const badgeX = Math.max(margin, width - badgeWidth - margin);
   const badgeY = Math.max(margin, height - badgeHeight - margin);
 
-  // 3. Crear SVG superpuesto con la firma
+  const diagonalFontSize = Math.max(22, Math.min(54, Math.round(minDim * 0.046)));
+
+  // 3. Crear SVG superpuesto con la MARCA DE AGUA (Diagonal en el centro + Sello en la esquina)
   const svgOverlay = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.5"/>
+          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.6"/>
         </filter>
       </defs>
+
+      ${
+        includeDiagonal
+          ? `
+      <!-- MARCA DE AGUA DIAGONAL EN EL CENTRO -->
+      <g transform="translate(${width / 2}, ${height / 2}) rotate(-22)">
+        <text
+          x="0"
+          y="0"
+          text-anchor="middle"
+          dominant-baseline="middle"
+          font-family="system-ui, -apple-system, sans-serif"
+          font-size="${diagonalFontSize}px"
+          font-weight="900"
+          fill="#ffffff"
+          fill-opacity="0.22"
+          stroke="#000000"
+          stroke-width="2"
+          stroke-opacity="0.3"
+          letter-spacing="2px"
+        >
+          ${watermarkText.toUpperCase()}
+        </text>
+      </g>
+      `
+          : ""
+      }
+
+      <!-- MARCA DE AGUA TIPO SELLO OFICIAL EN ESQUINA INFERIOR -->
       <g filter="url(#shadow)">
         <rect 
           x="${badgeX}" 
@@ -64,10 +97,10 @@ export async function signImageBufferWithSharp(
           height="${badgeHeight}" 
           rx="${Math.round(fontSize * 0.4)}" 
           fill="#0a0f1e" 
-          fill-opacity="0.82" 
+          fill-opacity="0.84" 
           stroke="#f43f5e" 
           stroke-width="1.5" 
-          stroke-opacity="0.5"
+          stroke-opacity="0.6"
         />
         <circle 
           cx="${badgeX + paddingX + Math.round(fontSize * 0.3)}" 
@@ -101,7 +134,7 @@ export async function signImageBufferWithSharp(
 }
 
 /**
- * Firma un video usando ffmpeg drawtext overlay en el servidor.
+ * Aplica MARCA DE AGUA a un video usando ffmpeg drawtext overlay en el servidor.
  * Preserva automáticamente la relación de aspecto y orientación vertical (9:16) u horizontal (16:9).
  */
 export async function signVideoWithFfmpeg(
@@ -112,8 +145,8 @@ export async function signVideoWithFfmpeg(
 ): Promise<void> {
   const watermarkText = `${domain}/${username.replace(/^@/, "")}`.replace(/:/g, "\\:");
 
-  // Filtro drawtext que se posiciona en la esquina inferior derecha adaptándose a la altura (h)
-  const filter = `drawtext=text='${watermarkText}':x=w-tw-30:y=h-th-30:fontsize=h/32:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=10`;
+  // Filtro drawtext que estampa la marca de agua con sombra y caja de fondo semitransparente
+  const filter = `drawtext=text='${watermarkText}':x=w-tw-25:y=h-th-25:fontsize=h/28:fontcolor=white@0.9:box=1:boxcolor=black@0.65:boxborderw=10:shadowcolor=black@0.7:shadowx=2:shadowy=2`;
 
   const cmd = `ffmpeg -y -i "${inputFilePath}" -vf "${filter}" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputFilePath}"`;
   await execAsync(cmd);
