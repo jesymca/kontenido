@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateProfileAction } from "@/actions/creator";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
 import { validateNoExternalContact } from "@/lib/contentFilter";
+import { CREATOR_CATEGORIES } from "@/lib/creatorCategories";
 import ImageCropModal from "@/components/ImageCropModal";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
 import {
@@ -34,6 +35,7 @@ interface Profile {
   displayName: string;
   bio: string | null;
   subscriptionPriceKoin: number;
+  creatorCategory?: string | null;
   isPublished: number;
   isAiGenerated?: number;
   avatarKey?: string | null;
@@ -44,9 +46,15 @@ interface Props {
   profile?: Profile | null;
   username: string;
   kycStatus?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+  managedCreatorId?: string;
 }
 
-export default function ProfileForm({ profile, username, kycStatus = "NONE" }: Props) {
+export default function ProfileForm({
+  profile,
+  username,
+  kycStatus = "NONE",
+  managedCreatorId,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +63,9 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
   const [activeUsername, setActiveUsername] = useState(username);
   const [isUsernameValid, setIsUsernameValid] = useState(true);
   const [bioState, setBioState] = useState(profile?.bio || "");
+  const [creatorCategory, setCreatorCategory] = useState(
+    profile?.creatorCategory || "MUJER"
+  );
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -401,6 +412,10 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
       </div>
 
       {/* 2. DATOS DE IDENTIDAD Y TEXTOS */}
+      {managedCreatorId && (
+        <input type="hidden" name="managedCreatorId" value={managedCreatorId} />
+      )}
+      <input type="hidden" name="creatorCategory" value={creatorCategory} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 items-start">
         <div>
           <label className="block text-xs font-semibold text-slate-300 mb-2">
@@ -415,6 +430,28 @@ export default function ProfileForm({ profile, username, kycStatus = "NONE" }: P
             placeholder="ej: Vanessa Gómez"
             className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:border-rose-500 focus:outline-hidden"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-300 mb-2">
+            Categoría del Perfil (Identidad)
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {CREATOR_CATEGORIES.map((cat) => (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => setCreatorCategory(cat.value)}
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition ${
+                  creatorCategory === cat.value
+                    ? "bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/20"
+                    : "bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div>

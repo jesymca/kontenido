@@ -2,7 +2,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { users, profiles, posts, mediaAssets } from "@/lib/db/schema";
+import { users, profiles, posts, mediaAssets, agencyCreators } from "@/lib/db/schema";
+import { ensureChatSchema } from "@/lib/db/initChat";
+import { CREATOR_CATEGORIES, getCreatorCategoryMeta } from "@/lib/creatorCategories";
 import { eq, and, desc, sql } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
 import {
@@ -16,14 +18,24 @@ import {
   Check,
   Image as ImageIcon,
   Video,
+  Building2,
 } from "lucide-react";
+
+interface HomePageProps {
+  searchParams?: Promise<{ categoria?: string }>;
+}
 
 /**
  * Página de inicio (Landing Page) de KONTENIDO
  * Presenta creadores destacados, propuesta de valor venezolana y accesos rápidos
  */
-export default async function HomePage() {
+export default async function HomePage({ searchParams }: HomePageProps) {
+  await ensureChatSchema();
   const session = await auth();
+  const resolvedSearch = searchParams ? await searchParams : {};
+  const activeCategory = CREATOR_CATEGORIES.some((c) => c.value === resolvedSearch?.categoria)
+    ? resolvedSearch.categoria!
+    : null;
 
   // Obtener creadores destacados para mostrar en la página de inicio
   // Algoritmo de posicionamiento: ordenados por Me Gusta (likesCount) y nivel de inversión
@@ -36,10 +48,13 @@ export default async function HomePage() {
     avatarKey: string | null;
     bannerKey: string | null;
     priceKoin: number;
+    creatorCategory: string;
     likesCount: number;
     isAiGenerated: number;
     photosCount: number;
     videosCount: number;
+    agencyBadgeText: string | null;
+    agencyBadgeColor: string | null;
   }> = [];
 
   try {
@@ -53,37 +68,64 @@ export default async function HomePage() {
         avatarKey: profiles.avatarKey,
         bannerKey: profiles.bannerKey,
         priceKoin: profiles.subscriptionPriceKoin,
+        creatorCategory: profiles.creatorCategory,
         likesCount: profiles.likesCount,
         isAiGenerated: profiles.isAiGenerated,
       })
       .from(users)
       .innerJoin(profiles, eq(users.id, profiles.userId))
-      .where(eq(users.role, "CREATOR"))
+      .where(
+        activeCategory
+          ? and(eq(users.role, "CREATOR"), eq(profiles.creatorCategory, activeCategory as any))
+          : eq(users.role, "CREATOR")
+      )
       .orderBy(desc(profiles.likesCount), desc(users.level))
-      .limit(8);
+      .limit(12);
 
     featuredCreators = await Promise.all(
       rawCreators.map(async (c) => {
         let photos = 0;
         let videos = 0;
+        let agencyBadgeText: string | null = null;
+        let agencyBadgeColor: string | null = null;
         try {
-          const mediaCounts = await db
-            .select({
-              type: mediaAssets.type,
-              count: sql<number>`count(*)`,
-            })
-            .from(mediaAssets)
-            .where(
-              and(
-                eq(mediaAssets.creatorId, c.id),
-                eq(mediaAssets.isDeleted, 0)
+          const [mediaCounts, agencyLink] = await Promise.all([
+            db
+              .select({
+                type: mediaAssets.type,
+                count: sql<number>`count(*)`,
+              })
+              .from(mediaAssets)
+              .where(
+                and(
+                  eq(mediaAssets.creatorId, c.id),
+                  eq(mediaAssets.isDeleted, 0)
+                )
               )
-            )
-            .groupBy(mediaAssets.type);
+              .groupBy(mediaAssets.type),
+            db.query.agencyCreators.findFirst({
+              where: and(
+                eq(agencyCreators.creatorId, c.id),
+                eq(agencyCreators.status, "ACCEPTED")
+              ),
+              with: {
+                agency: true,
+              },
+            }),
+          ]);
 
           for (const m of mediaCounts) {
             if (m.type === "IMAGE") photos = Number(m.count);
             if (m.type === "VIDEO") videos = Number(m.count);
+          }
+
+          if (
+            agencyLink?.agency &&
+            agencyLink.agency.status === "ACTIVE" &&
+            agencyLink.agency.showBadge === 1
+          ) {
+            agencyBadgeText = agencyLink.agency.badgeText || agencyLink.agency.name;
+            agencyBadgeColor = agencyLink.agency.badgeColor;
           }
         } catch {
           // Fallback seguro
@@ -91,10 +133,13 @@ export default async function HomePage() {
 
         return {
           ...c,
+          creatorCategory: c.creatorCategory || "MUJER",
           likesCount: c.likesCount || 0,
           isAiGenerated: c.isAiGenerated || 0,
           photosCount: photos,
           videosCount: videos,
+          agencyBadgeText,
+          agencyBadgeColor,
         };
       })
     );
@@ -177,7 +222,7 @@ export default async function HomePage() {
       {/* 2. CREADORES DESTACADOS */}
       <section className="py-16 bg-slate-950">
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2">
                 <Star className="w-6 h-6 text-amber-400 fill-amber-400" />
@@ -187,12 +232,31 @@ export default async function HomePage() {
                 Descubre perfiles verificados con contenido exclusivo y sube de nivel apoyándolos.
               </p>
             </div>
-            <Link
-              href="/registro"
-              className="hidden sm:flex items-center gap-1 text-xs text-rose-400 font-bold hover:underline"
-            >
-              Ver todos <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href="/"
+                className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
+                  !activeCategory
+                    ? "bg-rose-600 text-white border-rose-500"
+                    : "bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                Todas
+              </Link>
+              {CREATOR_CATEGORIES.map((cat) => (
+                <Link
+                  key={cat.value}
+                  href={`/?categoria=${cat.value}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
+                    activeCategory === cat.value
+                      ? "bg-rose-600 text-white border-rose-500"
+                      : "bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  {cat.plural}
+                </Link>
+              ))}
+            </div>
           </div>
 
           {featuredCreators.length > 0 ? (
@@ -243,6 +307,27 @@ export default async function HomePage() {
                     <h3 className="text-white font-bold text-base mt-1 group-hover:text-rose-400 transition">
                       {creator.displayName || creator.username}
                     </h3>
+
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${
+                          getCreatorCategoryMeta(creator.creatorCategory).badgeClass
+                        }`}
+                      >
+                        {getCreatorCategoryMeta(creator.creatorCategory).label}
+                      </span>
+                      {creator.agencyBadgeText && (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${
+                            creator.agencyBadgeColor ||
+                            "from-indigo-500 via-purple-500 to-rose-500"
+                          } shadow-sm`}
+                        >
+                          <Building2 className="w-2.5 h-2.5" />
+                          {creator.agencyBadgeText}
+                        </span>
+                      )}
+                    </div>
 
                     <p className="text-slate-400 text-xs mt-1.5 line-clamp-2 leading-relaxed flex-1">
                       {creator.bio || "Creadora de contenido exclusiva en KONTENIDO."}

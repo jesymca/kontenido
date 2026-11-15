@@ -46,6 +46,13 @@ export const profiles = sqliteTable("profiles", {
   avatarKey: text("avatar_key"), // Clave del archivo de avatar en Cloudflare R2
   bannerKey: text("banner_key"), // Clave del archivo de portada/banner en Cloudflare R2
   subscriptionPriceKoin: real("subscription_price_koin").notNull().default(10.0), // Precio mensual en KOIN
+  chatPriceKoin: real("chat_price_koin").notNull().default(5.0), // Tarifa en KOIN para que compradores usen el chat
+  chatDurationHours: integer("chat_duration_hours").notNull().default(168), // Duración en horas del pase de chat (168h = 7 días)
+  creatorCategory: text("creator_category", {
+    enum: ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"],
+  })
+    .notNull()
+    .default("MUJER"), // Categoría de la creadora: Mujer, Hombre, Pareja, Transexual
   likesCount: integer("likes_count").notNull().default(0), // Conteo de Me Gusta (Corazones) para algoritmo de posicionamiento
   isAiGenerated: integer("is_ai_generated").notNull().default(0), // 1 si el contenido del perfil es generado con Inteligencia Artificial
   isPublished: integer("is_published").notNull().default(0), // Si el perfil está visible públicamente (1) o borrador (0)
@@ -280,8 +287,10 @@ export const purchases = sqliteTable("purchases", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   creatorId: text("creator_id").references(() => users.id),
-  itemType: text("item_type", { enum: ["POST", "PACKAGE", "VIP_MEMBERSHIP"] }).notNull(),
-  itemId: text("item_id").notNull(), // ID del post, package o vip_membership
+  itemType: text("item_type", {
+    enum: ["POST", "PACKAGE", "VIP_MEMBERSHIP", "CHAT_ACCESS", "MESSAGE_PPV"],
+  }).notNull(),
+  itemId: text("item_id").notNull(), // ID del post, package, vip_membership, chat_pass o message
   priceKoin: real("price_koin").notNull(),
   status: text("status", { enum: ["COMPLETED", "REFUNDED"] })
     .notNull()
@@ -355,6 +364,47 @@ export const messages = sqliteTable("messages", {
   priceKoin: real("price_koin").notNull().default(0.0), // 0 si es libre, >0 si es PPV bloqueado
   isUnlocked: integer("is_unlocked").notNull().default(1), // 1 libre o comprado, 0 bloqueado
   isRead: integer("is_read").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: message_media (Múltiples fotos o videos adjuntos en un mensaje)
+ * ============================================================================
+ */
+export const messageMedia = sqliteTable("message_media", {
+  id: text("id").primaryKey(),
+  messageId: text("message_id")
+    .notNull()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  mediaKey: text("media_key").notNull(),
+  mediaType: text("media_type", { enum: ["IMAGE", "VIDEO"] }).notNull(),
+  mimeType: text("mime_type"),
+  sizeBytes: integer("size_bytes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: chat_passes (Pases de acceso pagados por compradores para chatear con creadoras)
+ * ============================================================================
+ */
+export const chatPasses = sqliteTable("chat_passes", {
+  id: text("id").primaryKey(),
+  buyerId: text("buyer_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  creatorId: text("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  priceKoinSnapshot: real("price_koin_snapshot").notNull(),
+  durationHours: integer("duration_hours").notNull(),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  status: text("status", { enum: ["ACTIVE", "EXPIRED"] })
+    .notNull()
+    .default("ACTIVE"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -468,6 +518,11 @@ export const agencies = sqliteTable("agencies", {
   name: text("name").notNull(),
   logoKey: text("logo_key"),
   description: text("description"),
+  badgeText: text("badge_text"), // Texto del badge llamativo mostrado en los perfiles de la agencia
+  badgeColor: text("badge_color")
+    .notNull()
+    .default("from-indigo-500 via-purple-500 to-rose-500"), // Gradiente Tailwind del badge
+  showBadge: integer("show_badge").notNull().default(1), // 1 mostrar badge en perfiles, 0 ocultar
   commissionPct: real("commission_pct").notNull().default(10.0),
   status: text("status", { enum: ["PENDING", "ACTIVE", "SUSPENDED"] })
     .notNull()
@@ -702,7 +757,7 @@ export const creatorSubscriptionPlansRelations = relations(
   })
 );
 
-export const messagesRelations = relations(messages, ({ one }) => ({
+export const messagesRelations = relations(messages, ({ one, many }) => ({
   sender: one(users, {
     fields: [messages.senderId],
     references: [users.id],
@@ -712,6 +767,25 @@ export const messagesRelations = relations(messages, ({ one }) => ({
     fields: [messages.receiverId],
     references: [users.id],
     relationName: "receiver",
+  }),
+  media: many(messageMedia),
+}));
+
+export const messageMediaRelations = relations(messageMedia, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageMedia.messageId],
+    references: [messages.id],
+  }),
+}));
+
+export const chatPassesRelations = relations(chatPasses, ({ one }) => ({
+  buyer: one(users, {
+    fields: [chatPasses.buyerId],
+    references: [users.id],
+  }),
+  creator: one(users, {
+    fields: [chatPasses.creatorId],
+    references: [users.id],
   }),
 }));
 

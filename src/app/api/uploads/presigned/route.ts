@@ -51,6 +51,8 @@ export async function POST(req: Request) {
     } else if (category === "kyc") {
       bucket = BUCKETS.PRIVATE;
       key = `creators/${userId}/kyc/${uniqueId}/${filename}`;
+    } else if (category === "chat") {
+      key = `creators/${userId}/chat/${uniqueId}/${filename}`;
     } else {
       key = `creators/${userId}/posts/${uniqueId}/original/${filename}`;
     }

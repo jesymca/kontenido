@@ -24,6 +24,8 @@ import { revalidatePath } from "next/cache";
 import { getDolarRates } from "@/lib/dolarapi";
 import { getCreatorCommissionTier } from "@/lib/commissions";
 import { validateNoExternalContact } from "@/lib/contentFilter";
+import { resolveCreatorTarget } from "@/lib/creatorTarget";
+import { ensureChatSchema } from "@/lib/db/initChat";
 
 const RESERVED_USERNAMES = new Set([
   "admin",
@@ -158,12 +160,22 @@ export async function checkUsernameAvailabilityAction(
  * Actualizar perfil público de la Creadora (incluyendo edición del enlace / username)
  */
 export async function updateProfileAction(formData: FormData) {
+  await ensureChatSchema();
   const session = await auth();
-  if (!session?.user || (session.user.role !== "CREATOR" && session.user.role !== "SUPER_ADMIN")) {
+  if (!session?.user) {
     return { error: "No autorizado" };
   }
 
-  const userId = session.user.id;
+  const target = await resolveCreatorTarget(
+    session.user,
+    formData.get("managedCreatorId") as string | null
+  );
+  if (!target.ok) {
+    return { error: target.error };
+  }
+
+  const userId = target.creatorId;
+  const targetCurrentUsername = target.username;
   const displayName = (formData.get("displayName") as string)?.trim();
   const rawUsername = (formData.get("username") as string)
     ?.toLowerCase()
@@ -173,6 +185,11 @@ export async function updateProfileAction(formData: FormData) {
   const bio = (formData.get("bio") as string)?.trim();
   const priceRaw = formData.get("subscriptionPriceKoin") as string;
   const subscriptionPriceKoin = parseFloat(priceRaw) || 10.0;
+  const rawCategory = (formData.get("creatorCategory") as string) || "MUJER";
+  const validCategories = ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"] as const;
+  const creatorCategory = validCategories.includes(rawCategory as any)
+    ? (rawCategory as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
+    : "MUJER";
   const isPublished = formData.get("isPublished") === "on" || formData.get("isPublished") === "1" ? 1 : 0;
   const isAiGenerated = formData.get("isAiGenerated") === "on" || formData.get("isAiGenerated") === "1" ? 1 : 0;
   const avatarKey = (formData.get("avatarKey") as string) || undefined;
@@ -193,10 +210,10 @@ export async function updateProfileAction(formData: FormData) {
   }
 
   const now = new Date().toISOString();
-  let finalUsername = session.user.username;
+  let finalUsername = targetCurrentUsername;
 
   // Si el usuario editó su nombre de usuario (enlace del perfil), validar disponibilidad y actualizar
-  if (rawUsername && rawUsername !== session.user.username) {
+  if (rawUsername && rawUsername !== targetCurrentUsername) {
     if (rawUsername.length < 3 || rawUsername.length > 30 || !/^[a-z0-9_]+$/.test(rawUsername)) {
       return {
         error: "El nombre de usuario debe tener entre 3 y 30 caracteres (solo letras minúsculas, números y guion bajo).",
@@ -235,6 +252,7 @@ export async function updateProfileAction(formData: FormData) {
       displayName,
       bio,
       subscriptionPriceKoin,
+      creatorCategory,
       isPublished,
       isAiGenerated,
       ...(avatarKey ? { avatarKey } : {}),
@@ -244,10 +262,12 @@ export async function updateProfileAction(formData: FormData) {
     .where(eq(profiles.userId, userId));
 
   revalidatePath("/", "layout");
-  revalidatePath(`/${session.user.username}`);
+  revalidatePath(`/${targetCurrentUsername}`);
   revalidatePath(`/${finalUsername}`);
   revalidatePath("/panel");
   revalidatePath("/panel/perfil");
+  revalidatePath("/agencia");
+  revalidatePath(`/agencia/creadoras/${userId}`);
 
   return { success: true, username: finalUsername };
 }
@@ -356,11 +376,19 @@ export async function deletePaymentMethodAction(paymentMethodId: string) {
  */
 export async function createPostAction(formData: FormData) {
   const session = await auth();
-  if (!session?.user || (session.user.role !== "CREATOR" && session.user.role !== "SUPER_ADMIN")) {
+  if (!session?.user) {
     return { error: "No autorizado" };
   }
 
-  const userId = session.user.id;
+  const target = await resolveCreatorTarget(
+    session.user,
+    formData.get("managedCreatorId") as string | null
+  );
+  if (!target.ok) {
+    return { error: target.error };
+  }
+
+  const userId = target.creatorId;
   const title = (formData.get("title") as string)?.trim();
   const description = (formData.get("description") as string)?.trim();
   const priceRaw = formData.get("priceKoin") as string;
@@ -428,8 +456,10 @@ export async function createPostAction(formData: FormData) {
     }
   }
 
-  revalidatePath(`/${session.user.username}`);
+  revalidatePath(`/${target.username}`);
   revalidatePath("/panel");
+  revalidatePath("/agencia");
+  revalidatePath(`/agencia/creadoras/${userId}`);
 
   return { success: true, postId };
 }
@@ -445,16 +475,21 @@ export async function deletePostWithBackupAction(postId: string) {
   const session = await auth();
   if (!session?.user) return { error: "No autorizado" };
 
-  const userId = session.user.id;
-
   // Obtener el post
   const post = await db.query.posts.findFirst({
-    where: and(eq(posts.id, postId), eq(posts.creatorId, userId)),
+    where: eq(posts.id, postId),
   });
 
   if (!post) {
+    return { error: "Contenido no encontrado." };
+  }
+
+  const target = await resolveCreatorTarget(session.user, post.creatorId);
+  if (!target.ok) {
     return { error: "Contenido no encontrado o no autorizado." };
   }
+
+  const userId = target.creatorId;
 
   const now = new Date().toISOString();
   const backupArchiveKey = `backups/${userId}/posts/${postId}_deleted_${Date.now()}`;
@@ -647,11 +682,19 @@ export async function requestPayoutAction(formData: FormData) {
  */
 export async function saveSubscriptionPlanAction(formData: FormData) {
   const session = await auth();
-  if (!session?.user || (session.user.role !== "CREATOR" && session.user.role !== "SUPER_ADMIN")) {
+  if (!session?.user) {
     return { error: "No autorizado" };
   }
 
-  const userId = session.user.id;
+  const target = await resolveCreatorTarget(
+    session.user,
+    formData.get("managedCreatorId") as string | null
+  );
+  if (!target.ok) {
+    return { error: target.error };
+  }
+
+  const userId = target.creatorId;
   const planId = (formData.get("planId") as string) || crypto.randomUUID();
   const name = (formData.get("name") as string)?.trim();
   const priceRaw = formData.get("priceKoin") as string;
@@ -708,7 +751,8 @@ export async function saveSubscriptionPlanAction(formData: FormData) {
 
   revalidatePath("/panel/suscripciones");
   revalidatePath("/panel/perfil");
-  revalidatePath(`/${session.user.username}`);
+  revalidatePath(`/${target.username}`);
+  revalidatePath(`/agencia/creadoras/${userId}`);
 
   return { success: true };
 }
@@ -720,30 +764,36 @@ export async function deleteSubscriptionPlanAction(planId: string) {
   const session = await auth();
   if (!session?.user) return { error: "No autorizado" };
 
+  const plan = await db.query.creatorSubscriptionPlans.findFirst({
+    where: eq(creatorSubscriptionPlans.id, planId),
+  });
+  if (!plan) return { error: "Plan no encontrado" };
+
+  const target = await resolveCreatorTarget(session.user, plan.creatorId);
+  if (!target.ok) return { error: target.error };
+
   await db
     .delete(creatorSubscriptionPlans)
     .where(
       and(
         eq(creatorSubscriptionPlans.id, planId),
-        eq(creatorSubscriptionPlans.creatorId, session.user.id)
+        eq(creatorSubscriptionPlans.creatorId, target.creatorId)
       )
     );
 
   revalidatePath("/panel/suscripciones");
   revalidatePath("/panel/perfil");
-  revalidatePath(`/${session.user.username}`);
+  revalidatePath(`/${target.username}`);
+  revalidatePath(`/agencia/creadoras/${target.creatorId}`);
 
   return { success: true };
 }
 
 /**
- * Enviar mensaje 1 a 1 estilo OnlyFans
+ * Enviar mensaje 1 a 1 estilo OnlyFans (delega a sendChatMessageAction para validar pases de chat y multimedia)
  */
 export async function sendMessageAction(formData: FormData) {
-  const session = await auth();
-  if (!session?.user) return { error: "Debes iniciar sesión para enviar mensajes." };
-
-  const senderId = session.user.id;
+  const { sendChatMessageAction } = await import("@/actions/chat");
   const receiverId = (formData.get("receiverId") as string)?.trim();
   const content = (formData.get("content") as string)?.trim();
   const priceRaw = formData.get("priceKoin") as string;
@@ -751,36 +801,10 @@ export async function sendMessageAction(formData: FormData) {
   const mediaKey = (formData.get("mediaKey") as string) || null;
   const mediaType = (formData.get("mediaType") as "IMAGE" | "VIDEO") || null;
 
-  if (!receiverId || (!content && !mediaKey)) {
-    return { error: "Destinatario y contenido son obligatorios." };
-  }
-
-  // Bloquear números de teléfono, correos o intentos de comunicarse fuera de la plataforma (tanto para Creadoras como para Consumidores)
-  if (content) {
-    const msgFilter = validateNoExternalContact(content, "El mensaje");
-    if (!msgFilter.valid) {
-      return { error: msgFilter.error };
-    }
-  }
-
-  const now = new Date().toISOString();
-  const msgId = crypto.randomUUID();
-
-  await db.insert(messages).values({
-    id: msgId,
-    senderId,
+  return sendChatMessageAction({
     receiverId,
-    content: content || "Mensaje multimedia",
-    mediaKey,
-    mediaType,
+    content,
     priceKoin,
-    isUnlocked: priceKoin > 0 ? 0 : 1, // Si tiene precio > 0 es PPV bloqueado
-    isRead: 0,
-    createdAt: now,
+    mediaItems: mediaKey && mediaType ? [{ mediaKey, mediaType }] : [],
   });
-
-  revalidatePath("/panel/mensajes");
-  revalidatePath("/mensajes");
-
-  return { success: true, msgId };
 }

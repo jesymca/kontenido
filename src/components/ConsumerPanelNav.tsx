@@ -58,7 +58,7 @@ export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProp
       exact: true,
     },
     {
-      href: "/panel/mensajes",
+      href: "/cuenta/mensajes",
       label: "Mensajes Privados",
       icon: MessageSquare,
       exact: false,

@@ -30,9 +30,15 @@ interface Props {
   onSuccess?: () => void;
   isKycApproved?: boolean;
   username?: string;
+  managedCreatorId?: string;
 }
 
-export default function SocialPostComposer({ onSuccess, isKycApproved = false, username }: Props) {
+export default function SocialPostComposer({
+  onSuccess,
+  isKycApproved = false,
+  username,
+  managedCreatorId,
+}: Props) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -184,6 +190,9 @@ export default function SocialPostComposer({ onSuccess, isKycApproved = false, u
       formData.set("isPublicTeaser", postAccess === "free_teaser" ? "1" : "0");
       formData.set("priceKoin", postAccess === "ppv" ? priceKoin : "0");
       formData.set("mediaKeys", JSON.stringify(uploadedMedia));
+      if (managedCreatorId) {
+        formData.set("managedCreatorId", managedCreatorId);
+      }
 
       const res = await createPostAction(formData);
       if (res.error) {

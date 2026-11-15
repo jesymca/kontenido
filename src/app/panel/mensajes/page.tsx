@@ -1,18 +1,22 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { messages, users, subscriptions } from "@/lib/db/schema";
+import { ensureChatSchema } from "@/lib/db/initChat";
 import { eq, or, desc, and } from "drizzle-orm";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
-import CreatorChatRoom from "@/components/CreatorChatRoom";
+import CreatorChatRoom, { type ConversationUser } from "@/components/CreatorChatRoom";
+import type { SerializedMessage } from "@/actions/chat";
 import { MessageCircle } from "lucide-react";
 import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Mensajería Privada | KONTENIDO Studio",
-  description: "Chat 1 a 1 con tus suscriptores y clientes con soporte PPV y emojis.",
+  description: "Chat 1 a 1 con tus suscriptores y clientes con soporte PPV y multimedia.",
 };
 
 export default async function CreatorMessagesPage() {
+  await ensureChatSchema();
+
   const session = await auth();
   if (!session?.user) {
     redirect("/login?callbackUrl=/panel/mensajes");
@@ -20,15 +24,21 @@ export default async function CreatorMessagesPage() {
 
   const userId = session.user.id;
 
-  // 0. Obtener usuario actual para estatus KYC y datos de estudio
+  // 0. Obtener usuario actual con su perfil para tarifa y tiempo de chat
   const currentUser = await db.query.users.findFirst({
     where: eq(users.id, userId),
+    with: {
+      profile: true,
+    },
   });
 
-  // 1. Obtener todos los mensajes donde participe el usuario
+  // 1. Obtener todos los mensajes donde participe el usuario (incluyendo multimedia)
   const allUserMessages = await db.query.messages.findMany({
     where: or(eq(messages.senderId, userId), eq(messages.receiverId, userId)),
     orderBy: [desc(messages.createdAt)],
+    with: {
+      media: true,
+    },
   });
 
   // 2. Obtener suscriptores activos para que el creador pueda iniciarles conversación
@@ -60,35 +70,68 @@ export default async function CreatorMessagesPage() {
   const partnerIds = Array.from(partnerIdsSet);
 
   // 4. Cargar datos de los usuarios interlocutores
-  const partnerUsers = partnerIds.length > 0
-    ? await db.query.users.findMany({
-        where: (u, { inArray }) => inArray(u.id, partnerIds),
-        with: {
-          profile: true,
-        },
-      })
-    : [];
+  const partnerUsers =
+    partnerIds.length > 0
+      ? await db.query.users.findMany({
+          where: (u, { inArray }) => inArray(u.id, partnerIds),
+          with: {
+            profile: true,
+          },
+        })
+      : [];
 
   const partnerMap = new Map(partnerUsers.map((u) => [u.id, u]));
 
   // 5. Organizar mensajes por interlocutor (cronológico ascendente)
-  const initialMessages: Record<string, any[]> = {};
+  const initialMessages: Record<string, SerializedMessage[]> = {};
   for (const partnerId of partnerIds) {
     initialMessages[partnerId] = [];
   }
 
-  // Recorremos en orden ascendente para el chat room
   const reversedMessages = [...allUserMessages].reverse();
   for (const msg of reversedMessages) {
     const partnerId = msg.senderId === userId ? msg.receiverId : msg.senderId;
     if (!initialMessages[partnerId]) {
       initialMessages[partnerId] = [];
     }
-    initialMessages[partnerId].push(msg);
+    const isMine = msg.senderId === userId;
+    const isLocked = msg.priceKoin > 0 && msg.isUnlocked === 0 && !isMine;
+    const rawItems =
+      msg.media && msg.media.length > 0
+        ? [...msg.media].sort((a, b) => a.sortOrder - b.sortOrder)
+        : msg.mediaKey && msg.mediaType
+        ? [
+            {
+              id: `${msg.id}-legacy`,
+              mediaKey: msg.mediaKey,
+              mediaType: msg.mediaType,
+              sortOrder: 0,
+            },
+          ]
+        : [];
+
+    initialMessages[partnerId].push({
+      id: msg.id,
+      senderId: msg.senderId,
+      receiverId: msg.receiverId,
+      content: isLocked ? "Contenido exclusivo bloqueado" : msg.content,
+      mediaKey: isLocked ? null : msg.mediaKey,
+      mediaType: msg.mediaType,
+      mediaItems: rawItems.map((item) => ({
+        id: item.id,
+        mediaKey: isLocked ? null : item.mediaKey,
+        mediaType: item.mediaType,
+        sortOrder: item.sortOrder,
+      })),
+      priceKoin: msg.priceKoin,
+      isUnlocked: msg.isUnlocked,
+      isRead: msg.isRead,
+      createdAt: msg.createdAt,
+    });
   }
 
-  // 6. Construir lista de conversaciones con último mensaje y fecha
-  const conversations = partnerIds.map((partnerId) => {
+  // 6. Construir lista de conversaciones
+  const conversations: ConversationUser[] = partnerIds.map((partnerId) => {
     const partner = partnerMap.get(partnerId);
     const msgs = initialMessages[partnerId] || [];
     const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
@@ -99,12 +142,15 @@ export default async function CreatorMessagesPage() {
       displayName: partner?.profile?.displayName || partner?.username || "Usuario",
       level: partner?.level || 0,
       role: partner?.role || "CONSUMER",
-      lastMessage: lastMsg ? (lastMsg.priceKoin > 0 && lastMsg.isUnlocked === 0 ? "🔒 Mensaje de pago (PPV)" : lastMsg.content) : "Sin mensajes aún",
+      lastMessage: lastMsg
+        ? lastMsg.priceKoin > 0 && lastMsg.isUnlocked === 0
+          ? "🔒 Mensaje de pago (PPV)"
+          : lastMsg.content
+        : "Sin mensajes aún",
       lastMessageTime: lastMsg ? lastMsg.createdAt : undefined,
     };
   });
 
-  // Ordenar conversaciones por la más reciente
   conversations.sort((a, b) => {
     const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
     const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
@@ -125,15 +171,21 @@ export default async function CreatorMessagesPage() {
             Mensajería Privada
           </h1>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
-            Conecta de forma directa 1 a 1 con tus suscriptores y envía mensajes exclusivos con propinas o PPV.
+            Configura tu tarifa de chat para compradores y envía fotos o videos gratuitos o exclusivos (PPV).
           </p>
         </div>
       </div>
 
       <CreatorChatRoom
         currentUserId={userId}
+        currentUserRole={currentUser?.role || "CREATOR"}
+        currentUsername={currentUser?.username || session.user.username}
         conversations={conversations}
         initialMessages={initialMessages}
+        creatorChatSettings={{
+          priceKoin: currentUser?.profile?.chatPriceKoin ?? 5.0,
+          durationHours: currentUser?.profile?.chatDurationHours ?? 168,
+        }}
       />
     </div>
   );

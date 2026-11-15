@@ -1,10 +1,11 @@
 # Roles y flujos de usuario
 
-## 1. Registro (2 tipos de usuario, sin fricción)
+## 1. Registro (3 tipos de usuario, sin fricción)
 
-Pantalla de bienvenida con DOS botones grandes:
-- **"Quiero crear contenido"** → rol CREATOR
-- **"Quiero ver contenido"** → rol CONSUMER
+Pantalla de bienvenida con TRES botones grandes:
+- **"Quiero ver contenido"** → rol `CONSUMER`
+- **"Quiero crear contenido"** → rol `CREATOR` (puede indicar categoría: Mujer, Hombre, Pareja o Transexual)
+- **"Soy una Agencia"** → rol `AGENCY` (permite crear y administrar múltiples perfiles de creadoras)
 
 ### Flujo CREATOR (obligatorio KYC + contrato)
 1. Datos: email, password, username (slug), fecha de nacimiento.

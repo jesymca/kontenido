@@ -13,7 +13,10 @@ import {
   creatorSubscriptionPlans,
   profileLikes,
   profileFavorites,
+  agencyCreators,
 } from "@/lib/db/schema";
+import { ensureChatSchema } from "@/lib/db/initChat";
+import { getCreatorCategoryMeta } from "@/lib/creatorCategories";
 import { eq, and, desc, gt } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
 import SubscribeButton from "@/components/SubscribeButton";
@@ -35,6 +38,8 @@ import {
   Image as ImageIcon,
   Video,
   Bot,
+  MessageCircle,
+  Building2,
 } from "lucide-react";
 import { getPresignedDownloadUrl, BUCKETS } from "@/lib/r2";
 
@@ -122,6 +127,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * Multi-tenant por path nativo. Resuelve el username contra la base de datos.
  */
 export default async function PublicProfilePage({ params }: PageProps) {
+  await ensureChatSchema();
   const { username } = await params;
   const decodedUsername = decodeURIComponent(username).toLowerCase().trim();
 
@@ -170,6 +176,24 @@ export default async function PublicProfilePage({ params }: PageProps) {
       creatorVipColor = vip.badgeColor;
     }
   }
+
+  // 2b. Obtener agencia si el perfil pertenece a una agencia activa y tiene badge habilitado
+  const agencyLink = await db.query.agencyCreators.findFirst({
+    where: and(
+      eq(agencyCreators.creatorId, creator.id),
+      eq(agencyCreators.status, "ACCEPTED")
+    ),
+    with: {
+      agency: true,
+    },
+  });
+  const activeAgency =
+    agencyLink?.agency &&
+    agencyLink.agency.status === "ACTIVE" &&
+    agencyLink.agency.showBadge === 1
+      ? agencyLink.agency
+      : null;
+  const categoryMeta = getCreatorCategoryMeta(creator.profile?.creatorCategory);
 
   // 3. Verificar si el usuario actual tiene suscripción activa a esta creadora
   let isSubscriber = false;
@@ -305,8 +329,21 @@ export default async function PublicProfilePage({ params }: PageProps) {
                   isAiGenerated={profile?.isAiGenerated === 1}
                   showRoleBadge
                 />
-                <h1 className="text-2xl sm:text-3xl font-black text-white mt-1">
-                  {profile?.displayName || creator.username}
+                <h1 className="text-2xl sm:text-3xl font-black text-white mt-1 flex items-center gap-2.5 flex-wrap">
+                  <span>{profile?.displayName || creator.username}</span>
+                  <span
+                    className={`text-[11px] px-2.5 py-0.5 rounded-full border font-bold ${categoryMeta.badgeClass}`}
+                  >
+                    {categoryMeta.label}
+                  </span>
+                  {activeAgency && (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${activeAgency.badgeColor} shadow-lg`}
+                    >
+                      <Building2 className="w-3.5 h-3.5" />
+                      {activeAgency.badgeText || activeAgency.name}
+                    </span>
+                  )}
                 </h1>
               </div>
             </div>
@@ -330,12 +367,22 @@ export default async function PublicProfilePage({ params }: PageProps) {
                   Editar mi perfil
                 </a>
               ) : (
-                <SubscribeButton
-                  creatorId={creator.id}
-                  priceKoin={subscriptionPrice}
-                  isSubscriber={isSubscriber}
-                  plans={plans}
-                />
+                <>
+                  <a
+                    href={`/cuenta/mensajes?creator=${creator.id}`}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                    title="Chatear en privado con esta creadora"
+                  >
+                    <MessageCircle className="w-4 h-4 text-rose-400" />
+                    <span>Chat ({profile?.chatPriceKoin ?? 5} KOIN)</span>
+                  </a>
+                  <SubscribeButton
+                    creatorId={creator.id}
+                    priceKoin={subscriptionPrice}
+                    isSubscriber={isSubscriber}
+                    plans={plans}
+                  />
+                </>
               )}
             </div>
           </div>

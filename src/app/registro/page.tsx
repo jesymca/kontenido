@@ -4,8 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Sparkles, Eye, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
-import { registerCreatorAction, registerConsumerAction } from "@/actions/auth";
+import { Sparkles, Eye, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2, Building2 } from "lucide-react";
+import {
+  registerCreatorAction,
+  registerConsumerAction,
+  registerAgencyAction,
+} from "@/actions/auth";
 import { signIn } from "next-auth/react";
 import PasswordInput from "@/components/PasswordInput";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
@@ -19,7 +23,7 @@ import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
  */
 export default function RegistroPage() {
   const router = useRouter();
-  const [selectedRole, setSelectedRole] = useState<"CREATOR" | "CONSUMER">("CONSUMER");
+  const [selectedRole, setSelectedRole] = useState<"CREATOR" | "CONSUMER" | "AGENCY">("CONSUMER");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -36,6 +40,8 @@ export default function RegistroPage() {
       const res =
         selectedRole === "CREATOR"
           ? await registerCreatorAction(formData)
+          : selectedRole === "AGENCY"
+          ? await registerAgencyAction(formData)
           : await registerConsumerAction(formData);
 
       if (res.error) {
@@ -51,6 +57,8 @@ export default function RegistroPage() {
       setSuccess(
         selectedRole === "CREATOR"
           ? "¡Cuenta de creadora creada con éxito! Entrando a tu Estudio..."
+          : selectedRole === "AGENCY"
+          ? "¡Agencia registrada con éxito! Entrando a tu Panel de Agencia..."
           : "¡Bienvenido a KONTENIDO! Entrando a tu cuenta..."
       );
 
@@ -61,7 +69,12 @@ export default function RegistroPage() {
       });
 
       if (!loginRes?.error) {
-        window.location.href = selectedRole === "CREATOR" ? "/panel" : "/cuenta";
+        window.location.href =
+          selectedRole === "CREATOR"
+            ? "/panel"
+            : selectedRole === "AGENCY"
+            ? "/agencia"
+            : "/cuenta";
       } else {
         window.location.href = "/login";
       }
@@ -92,26 +105,26 @@ export default function RegistroPage() {
           </p>
         </div>
 
-        {/* 1. Selección de tipo de cuenta con dos botones grandes */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        {/* 1. Selección de tipo de cuenta con tres botones grandes */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           <button
             type="button"
             onClick={() => {
               setSelectedRole("CONSUMER");
               setError(null);
             }}
-            className={`p-5 rounded-2xl border text-left transition-all relative overflow-hidden ${
+            className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
               selectedRole === "CONSUMER"
                 ? "bg-slate-800 border-rose-500 shadow-lg shadow-rose-500/10 ring-2 ring-rose-500/40"
                 : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
             }`}
           >
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center mb-3">
-              <Eye className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center mb-2.5">
+              <Eye className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-bold text-white">Quiero ver contenido</h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Explora fotos y videos, suscríbete a tus creadoras favoritas y sube de nivel con KOIN.
+            <h3 className="text-sm font-bold text-white">Quiero ver contenido</h3>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+              Explora fotos y videos, suscríbete y sube de nivel con KOIN.
             </p>
           </button>
 
@@ -121,18 +134,39 @@ export default function RegistroPage() {
               setSelectedRole("CREATOR");
               setError(null);
             }}
-            className={`p-5 rounded-2xl border text-left transition-all relative overflow-hidden ${
+            className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
               selectedRole === "CREATOR"
                 ? "bg-slate-800 border-rose-500 shadow-lg shadow-rose-500/10 ring-2 ring-rose-500/40"
                 : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
             }`}
           >
-            <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center mb-3">
-              <Sparkles className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center mb-2.5">
+              <Sparkles className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-bold text-white">Quiero crear contenido</h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Monetiza en 1 solo clic, recibe pagos semanales en PagoMóvil, Banco o Binance USDT.
+            <h3 className="text-sm font-bold text-white">Quiero crear contenido</h3>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+              Monetiza en 1 clic y recibe pagos semanales en Bs. o Binance.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRole("AGENCY");
+              setError(null);
+            }}
+            className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
+              selectedRole === "AGENCY"
+                ? "bg-slate-800 border-indigo-500 shadow-lg shadow-indigo-500/10 ring-2 ring-indigo-500/40"
+                : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-2.5">
+              <Building2 className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold text-white">Soy una Agencia</h3>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+              Crea y administra múltiples perfiles, contenidos, tarifas y chats.
             </p>
           </button>
         </div>
@@ -195,8 +229,27 @@ export default function RegistroPage() {
 
         {/* Formulario de registro */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {selectedRole === "AGENCY" && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Nombre de la Agencia (Se mostrará en el badge de tus perfiles)
+              </label>
+              <input
+                name="agencyName"
+                type="text"
+                required
+                placeholder="ej: Velvet Agency VIP"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white placeholder-slate-600 text-sm focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+              />
+            </div>
+          )}
+
           <UsernameAvailabilityInput
-            label="Nombre de usuario (Enlace del perfil)"
+            label={
+              selectedRole === "AGENCY"
+                ? "Usuario de la Agencia"
+                : "Nombre de usuario (Enlace del perfil)"
+            }
           />
 
           <div>

@@ -29,6 +29,8 @@
 - [x] F19 — Optimización Integral de Metadatos SEO, Open Graph 1200x630 (WhatsApp, Telegram, Instagram, Twitter), Favicons PNG/ICO, Robots.txt, Sitemap.xml y PWA Manifest (DONE - 2026-11-09)
 - [x] F20 — Corrección y Sincronización Estricta de Esquema en Turso para `/admin/usuarios` + Resiliencia con Fallback (DONE - 2026-11-09)
 - [x] F21 — Firma Digital de Contenidos (`https://www.kontenido.online/{usuario}`), Validación Directa de KYC y Mayoría de Edad en SUPER_ADMIN, Modal Lightbox de Documentos y Preservación Estricta de Perspectiva Vertical (DONE - 2026-11-11)
+- [x] F22 — Chat Privado de Pago por Tiempo (KOIN) + Envío de Packs Multimedia (1+ Fotos / 1+ Videos) Gratuitos o PPV en Mensajería (DONE - 2026-11-15)
+- [x] F23 — Categorías de Creadoras (Mujer, Hombre, Pareja, Transexual) + Registro y Panel Integral de Agencias con Badge Configurable (DONE - 2026-11-15)
 
 ## Notas
 - **F0 Completada**: Next.js 16.4.5 instalado con TypeScript, TailwindCSS, PostCSS, Drizzle ORM, @libsql/client, AWS SDK para R2, Zod, Lucide React, NextAuth v5. Variables de entorno inicializadas en `.env` y documentadas en `.env.example`.
@@ -252,3 +254,14 @@
   - **Preservación Estricta de Perspectiva y Orientación (Vertical vs Horizontal)**:
     - En `MediaCaptureModal.tsx`: Restricciones dinámicas de cámara WebRTC para orientación vertical (9:16) en smartphones y horizontal (16:9) en desktop. Dimensiones del canvas ajustadas a `video.videoWidth` y `video.videoHeight` reales.
     - Eliminado el forzado `aspect-video object-cover` en `SocialPostComposer.tsx`, `CreatorContentModal.tsx`, `CedulaOcrScanner.tsx` y `MediaCaptureModal.tsx`, reemplazado por `object-contain` y dimensiones flexibles para que fotos y videos verticales conserven su relación de aspecto real sin recortes.
+
+- **F22 — Chat Privado de Pago por Tiempo (KOIN) + Packs Multimedia en Mensajería (DONE - 2026-11-15)**:
+  - **Control de Acceso al Chat**: Los compradores deben adquirir un Pase de Chat en KOIN (`chat_passes`) para comunicarse con una creadora. Cada creadora define su tarifa (`profiles.chat_price_koin`) y duración en horas/días (`profiles.chat_duration_hours`) desde su panel (`/panel/mensajes`).
+  - **Multimedia Múltiple en Chat (`message_media`)**: Las creadoras pueden adjuntar 1 o más fotos o videos (con marca de agua automática en fotos y subida directa a R2 `category: "chat"`) y elegir antes de enviar si el receptor lo ve gratis (`0 KOIN`) o si debe pagar para desbloquearlo (PPV, sugerencia `1 KOIN` por foto o cualquier monto decimal/entero como `1.5`, `3`, etc.).
+  - **Bandeja para Compradores (`/cuenta/mensajes`)**: Nueva ruta dedicada para consumidores con paywall de pase de chat, desbloqueo PPV de packs y enlace directo desde perfiles públicos (`/[username]`) y `ConsumerPanelNav`.
+
+- **F23 — Categorías de Creadoras y Plataforma Integral de Agencias (DONE - 2026-11-15)**:
+  - **Categorías de Perfil (`profiles.creator_category`)**: Las creadoras y agencias pueden seleccionar si el perfil corresponde a **Mujer**, **Hombre**, **Pareja** o **Transexual** (`src/lib/creatorCategories.ts`). Se muestra como badge en el catálogo (`/`) y en el perfil público (`/[username]`), con filtros por categoría en la página de inicio.
+  - **Registro y Panel de Agencias (`/registro`, `/agencia`, `/agencia/creadoras/[id]`)**:
+    - Nueva opción **"Soy una Agencia"** en `/registro` (`registerAgencyAction`).
+    - Desde `/agencia`, las agencias pueden crear múltiples perfiles de creadoras, configurar el **Badge llamativo** de la agencia (`badgeText`, `badgeColor`, `showBadge`), y administrar cada perfil en `/agencia/creadoras/[id]` reutilizando `ProfileForm`, `SocialPostComposer`, `CreatorPlansManager` y `CreatorChatRoom` sin duplicar lógica mediante `resolveCreatorTarget`.

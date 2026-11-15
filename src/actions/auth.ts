@@ -1,7 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { users, profiles, wallets } from "@/lib/db/schema";
+import { users, profiles, wallets, agencies } from "@/lib/db/schema";
+import { ensureChatSchema } from "@/lib/db/initChat";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -176,6 +177,94 @@ export async function registerConsumerAction(formData: FormData) {
     totalSpentUsd: 0.0,
     totalEarnedKoin: 0.0,
     updatedAt: now,
+  });
+
+  return { success: true };
+}
+
+const registerAgencySchema = z.object({
+  agencyName: z
+    .string()
+    .min(2, "El nombre de la agencia debe tener al menos 2 caracteres")
+    .max(60, "Máximo 60 caracteres"),
+  username: z
+    .string()
+    .min(3, "El nombre de usuario debe tener al menos 3 caracteres")
+    .max(30, "Máximo 30 caracteres")
+    .regex(/^[a-z0-9_]+$/, "Solo letras minúsculas, números y guiones bajos"),
+  email: z.string().email("Ingresa un correo electrónico válido"),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  description: z.string().max(300).optional(),
+});
+
+/**
+ * Registrar una nueva cuenta de AGENCIA
+ */
+export async function registerAgencyAction(formData: FormData) {
+  await ensureChatSchema();
+
+  const raw = {
+    agencyName: (formData.get("agencyName") as string)?.trim(),
+    username: (formData.get("username") as string)?.toLowerCase().trim(),
+    email: (formData.get("email") as string)?.toLowerCase().trim(),
+    password: formData.get("password") as string,
+    description: (formData.get("description") as string)?.trim(),
+  };
+
+  const validated = registerAgencySchema.safeParse(raw);
+  if (!validated.success) {
+    return { error: validated.error.errors[0]?.message || "Datos inválidos" };
+  }
+
+  const { agencyName, username, email, password, description } = validated.data;
+
+  const existing = await db.query.users.findFirst({
+    where: or(eq(users.username, username), eq(users.email, email)),
+  });
+
+  if (existing) {
+    if (existing.email === email) return { error: "Este correo electrónico ya está registrado." };
+    if (existing.username === username) return { error: "Este nombre de usuario ya está en uso." };
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const userId = crypto.randomUUID();
+  const agencyId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  await db.insert(users).values({
+    id: userId,
+    username,
+    email,
+    passwordHash,
+    role: "AGENCY",
+    status: "ACTIVE",
+    kycStatus: "NONE",
+    level: 0,
+    allowDownload: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await db.insert(wallets).values({
+    userId,
+    balanceKoin: 0.0,
+    totalSpentUsd: 0.0,
+    totalEarnedKoin: 0.0,
+    updatedAt: now,
+  });
+
+  await db.insert(agencies).values({
+    id: agencyId,
+    ownerUserId: userId,
+    name: agencyName,
+    description: description || `Agencia oficial de talentos ${agencyName} en KONTENIDO.`,
+    badgeText: agencyName,
+    badgeColor: "from-indigo-500 via-purple-500 to-rose-500",
+    showBadge: 1,
+    commissionPct: 10.0,
+    status: "ACTIVE",
+    createdAt: now,
   });
 
   return { success: true };

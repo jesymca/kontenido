@@ -16,9 +16,10 @@ interface Plan {
 
 interface Props {
   plans: Plan[];
+  managedCreatorId?: string;
 }
 
-export default function CreatorPlansManager({ plans }: Props) {
+export default function CreatorPlansManager({ plans, managedCreatorId }: Props) {
   const [editingPlan, setEditingPlan] = useState<Partial<Plan> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,9 @@ export default function CreatorPlansManager({ plans }: Props) {
     setSuccess(false);
 
     const formData = new FormData(e.currentTarget);
+    if (managedCreatorId) {
+      formData.set("managedCreatorId", managedCreatorId);
+    }
     try {
       const res = await saveSubscriptionPlanAction(formData);
       if (res.error) {
