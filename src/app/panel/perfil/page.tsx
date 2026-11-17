@@ -34,8 +34,8 @@ export default async function PerfilPage() {
         kycStatus={user?.kycStatus || "NONE"}
       />
 
-      <div className="container mx-auto px-4 pb-12 max-w-3xl">
-        <div className="flex items-center justify-between mb-6">
+      <div className="container mx-auto px-4 pt-6 sm:pt-8 pb-12 max-w-3xl">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
           <div>
             <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
               <Settings className="w-6 h-6 text-rose-500" />

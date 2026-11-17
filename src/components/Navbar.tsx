@@ -129,49 +129,49 @@ export default async function Navbar() {
   const isVenezuela = isVenezuelanUser(effectiveCountry);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-3">
-        {/* Logotipo KONTENIDO */}
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/95 backdrop-blur-md overflow-x-clip">
+      <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-2.5 min-h-[3.5rem] sm:min-h-[4rem] flex flex-wrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2">
+        {/* Logotipo KONTENIDO y accesos desktop */}
+        <div className="flex items-center gap-3 lg:gap-4 min-w-0">
+          <Link href="/" className="flex items-center gap-1.5 sm:gap-2.5 group shrink-0">
             <Image
               src="/img/favicon.svg"
               alt="KONTENIDO Icon"
               width={32}
               height={32}
-              className="w-8 h-8 rounded-lg shadow-md group-hover:scale-105 transition-transform"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg shadow-md group-hover:scale-105 transition-transform shrink-0"
             />
             <Image
               src="/img/logo.png"
               alt="KONTENIDO"
-              width={150}
+              width={165}
               height={28}
               priority
-              className="h-6 sm:h-7 w-auto object-contain"
+              className="h-4 sm:h-6 md:h-7 w-auto max-w-[96px] sm:max-w-[180px] object-contain shrink-0"
             />
           </Link>
 
-          {/* Accesos rápidos a KOMESTIBLE y KOINCIDEN */}
-          <div className="hidden md:flex items-center gap-1.5">
+          {/* Accesos rápidos a KOMESTIBLE y KOINCIDEN en pantallas desktop (>= lg) */}
+          <div className="hidden lg:flex items-center gap-1.5 shrink-0">
             <Link
               href="/komestible"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600/20 to-amber-500/20 border border-rose-500/40 text-rose-300 hover:text-white hover:border-rose-400 transition text-xs font-black"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600/20 to-amber-500/20 border border-rose-500/40 text-rose-300 hover:text-white hover:border-rose-400 transition text-xs font-black whitespace-nowrap shrink-0"
               title="Sección gratuita estilo encuentros para valorar fotos"
             >
-              <Flame className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+              <Flame className="w-3.5 h-3.5 text-rose-500 fill-rose-500 shrink-0" />
               <span>KOMESTIBLE</span>
             </Link>
 
             {sessionUser && (
               <Link
                 href="/koinciden"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-rose-500/50 transition text-xs font-bold"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-rose-500/50 transition text-xs font-bold whitespace-nowrap shrink-0"
                 title="Matches mutuos de KOMESTIBLE"
               >
-                <MessageCircleHeart className="w-3.5 h-3.5 text-pink-400" />
+                <MessageCircleHeart className="w-3.5 h-3.5 text-pink-400 shrink-0" />
                 <span>KOINCIDEN</span>
                 {koincidenCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black">
+                  <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black leading-none">
                     {koincidenCount}
                   </span>
                 )}
@@ -181,13 +181,13 @@ export default async function Navbar() {
         </div>
 
         {/* Acciones derechas */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center justify-end gap-1 sm:gap-2 shrink-0 ml-auto">
           {sessionUser ? (
             <>
               {/* Billetera KOIN: Para creadoras lleva al Hub de Retiros (/panel/pagos), para consumidores a Billetera/Recargas (/cuenta) */}
               <Link
                 href={effectiveRole === "CREATOR" ? "/panel/pagos" : "/cuenta"}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition text-xs font-semibold"
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition text-[11px] sm:text-xs font-semibold whitespace-nowrap shrink-0"
                 title={
                   effectiveRole === "CREATOR"
                     ? isVenezuela
@@ -196,12 +196,15 @@ export default async function Navbar() {
                     : "Tu saldo KOIN disponible"
                 }
               >
-                <Coins className="w-4 h-4 text-amber-400 animate-pulse" />
-                <span>{balanceKoin.toFixed(2)} KOIN</span>
+                <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+                <span>
+                  {balanceKoin.toFixed(2)}
+                  <span className="hidden sm:inline"> KOIN</span>
+                </span>
               </Link>
 
-              {/* Badge de nivel con marco y distintivo VIP */}
-              <div className="hidden sm:flex items-center">
+              {/* Badge de nivel con marco y distintivo VIP (visible desde md para evitar colisiones en móvil) */}
+              <div className="hidden md:flex items-center shrink-0 max-w-[240px] overflow-hidden">
                 <UserLevelBadge
                   level={effectiveLevel}
                   username={effectiveUsername}
@@ -210,6 +213,7 @@ export default async function Navbar() {
                   role={effectiveRole}
                   kycStatus={effectiveKycStatus}
                   showRoleBadge
+                  className="flex-nowrap whitespace-nowrap"
                 />
               </div>
 
@@ -217,9 +221,10 @@ export default async function Navbar() {
               {effectiveRole === "SUPER_ADMIN" && (
                 <Link
                   href="/admin"
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition shadow-sm"
+                  className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-red-600 text-white text-[11px] sm:text-xs font-bold hover:bg-red-700 transition shadow-sm whitespace-nowrap shrink-0"
+                  title="Panel de Administración"
                 >
-                  <Shield className="w-3.5 h-3.5" />
+                  <Shield className="w-3.5 h-3.5 shrink-0" />
                   <span className="hidden md:inline">Panel Admin</span>
                 </Link>
               )}
@@ -228,19 +233,20 @@ export default async function Navbar() {
                 <>
                   <Link
                     href="/panel"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition shadow-sm shadow-rose-600/30"
+                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-rose-600 text-white text-[11px] sm:text-xs font-bold hover:bg-rose-700 transition shadow-sm shadow-rose-600/30 whitespace-nowrap shrink-0"
                     title="Panel de Estudio para Creadoras"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Mi Estudio</span>
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    <span className="sm:hidden">Estudio</span>
+                    <span className="hidden sm:inline">Mi Estudio</span>
                   </Link>
 
                   <Link
                     href="/panel/pagos"
-                    className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 text-xs font-semibold hover:bg-slate-700 transition border border-amber-500/20"
+                    className="hidden xl:flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 text-xs font-semibold hover:bg-slate-700 transition border border-amber-500/20 whitespace-nowrap shrink-0"
                     title={isVenezuela ? "Retiros y cortes en Bolívares o USDT" : "Retiros internacionales en USDT"}
                   >
-                    <DollarSign className="w-3.5 h-3.5" />
+                    <DollarSign className="w-3.5 h-3.5 shrink-0" />
                     <span>{isVenezuela ? "Retiros (Bs.)" : "Retiros (USDT)"}</span>
                   </Link>
                 </>
@@ -249,17 +255,18 @@ export default async function Navbar() {
               {effectiveRole === "AGENCY" && (
                 <Link
                   href="/agencia"
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition"
+                  className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-[11px] sm:text-xs font-bold hover:bg-indigo-700 transition whitespace-nowrap shrink-0"
+                  title="Panel de Agencia"
                 >
-                  <LayoutDashboard className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Agencia</span>
+                  <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Agencia</span>
                 </Link>
               )}
 
               {/* Perfil del usuario */}
               <Link
                 href={`/${effectiveUsername}`}
-                className="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition"
+                className="p-1.5 sm:p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0"
                 title="Ver mi perfil público"
               >
                 <User className="w-4 h-4" />
@@ -271,10 +278,11 @@ export default async function Navbar() {
                   "use server";
                   await signOut({ redirectTo: "/" });
                 }}
+                className="shrink-0"
               >
                 <button
                   type="submit"
-                  className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                  className="p-1.5 sm:p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
                   title="Cerrar sesión"
                 >
                   <LogOut className="w-4 h-4" />
@@ -282,23 +290,16 @@ export default async function Navbar() {
               </form>
             </>
           ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                href="/komestible"
-                className="md:hidden flex items-center gap-1 text-xs font-black text-rose-400 px-2.5 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30"
-              >
-                <Flame className="w-3.5 h-3.5" />
-                <span>KOMESTIBLE</span>
-              </Link>
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <Link
                 href="/login"
-                className="text-xs sm:text-sm font-medium text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+                className="text-[11px] sm:text-sm font-medium text-slate-300 hover:text-white px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg hover:bg-slate-800 transition whitespace-nowrap shrink-0"
               >
                 Iniciar Sesión
               </Link>
               <Link
                 href="/registro"
-                className="text-xs sm:text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl transition shadow-md shadow-rose-600/20"
+                className="text-[11px] sm:text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl transition shadow-md shadow-rose-600/20 whitespace-nowrap shrink-0"
               >
                 Registrarse
               </Link>
@@ -307,25 +308,27 @@ export default async function Navbar() {
         </div>
       </div>
 
-      {/* Acceso móvil rápido a KOMESTIBLE / KOINCIDEN cuando está autenticado */}
-      {sessionUser && (
-        <div className="md:hidden border-t border-slate-800/70 bg-slate-950/90 px-4 py-1.5 flex items-center justify-center gap-2">
+      {/* Acceso móvil y tablet (< lg) dedicado a KOMESTIBLE / KOINCIDEN en su propia fila sin superponerse al logotipo */}
+      <div className="lg:hidden border-t border-slate-800/70 bg-slate-950/95">
+        <div className="container mx-auto px-3 sm:px-4 py-1.5 flex items-center justify-center gap-2">
           <Link
             href="/komestible"
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-rose-600/15 border border-rose-500/30 text-rose-300 text-[11px] font-black"
+            className="flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-rose-600/15 border border-rose-500/30 text-rose-300 hover:text-white text-[11px] font-black whitespace-nowrap"
           >
-            <Flame className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
-            KOMESTIBLE (Gratis)
+            <Flame className="w-3.5 h-3.5 text-rose-500 fill-rose-500 shrink-0" />
+            <span className="truncate">KOMESTIBLE (Gratis)</span>
           </Link>
-          <Link
-            href="/koinciden"
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-[11px] font-bold"
-          >
-            <MessageCircleHeart className="w-3.5 h-3.5 text-pink-400" />
-            KOINCIDEN ({koincidenCount})
-          </Link>
+          {sessionUser && (
+            <Link
+              href="/koinciden"
+              className="flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 hover:text-white text-[11px] font-bold whitespace-nowrap"
+            >
+              <MessageCircleHeart className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+              <span className="truncate">KOINCIDEN ({koincidenCount})</span>
+            </Link>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Menú desplegado permanente para Creadoras de Contenido en toda la plataforma */}
       {sessionUser && effectiveRole === "CREATOR" && (
