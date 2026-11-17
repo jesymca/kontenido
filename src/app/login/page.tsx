@@ -98,6 +98,13 @@ export default function LoginPage() {
           </svg>
           Continuar con Google
         </button>
+        <p className="text-[11px] text-slate-400 text-center -mt-3 mb-5">
+          Si es tu primera vez y quieres <strong className="text-rose-400">vender contenido</strong>,{" "}
+          <Link href="/registro?rol=creador" className="text-rose-400 underline font-semibold">
+            regístrate como Creador/a aquí
+          </Link>
+          .
+        </p>
 
         <div className="relative flex items-center justify-center my-6">
           <div className="absolute inset-0 flex items-center">
@@ -156,11 +163,24 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="text-center mt-6 text-xs text-slate-400">
-          ¿Aún no tienes cuenta?{" "}
-          <Link href="/registro" className="text-rose-400 font-semibold hover:underline">
-            Regístrate aquí
-          </Link>
+        <div className="mt-6 pt-5 border-t border-slate-800 space-y-2.5 text-center">
+          <p className="text-xs text-slate-400">
+            ¿Aún no tienes cuenta? Elige tu modo según lo que deseas hacer:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Link
+              href="/registro?rol=creador"
+              className="px-3 py-2 rounded-xl bg-rose-600/15 border border-rose-500/40 text-rose-300 hover:bg-rose-600 hover:text-white text-xs font-bold transition"
+            >
+              Crear para Vender (Creador/a)
+            </Link>
+            <Link
+              href="/registro?rol=consumidor"
+              className="px-3 py-2 rounded-xl bg-sky-600/15 border border-sky-500/40 text-sky-300 hover:bg-sky-600 hover:text-white text-xs font-bold transition"
+            >
+              Solo Ver Contenido (Consumidor)
+            </Link>
+          </div>
         </div>
       </div>
     </div>

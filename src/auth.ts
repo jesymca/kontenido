@@ -4,7 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
-import { users, profiles, wallets } from "@/lib/db/schema";
+import { users, profiles, wallets, agencies } from "@/lib/db/schema";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -110,9 +110,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           cookieStore.get("next-auth.callback-url")?.value ||
           "";
 
+        const wantsAgency =
+          intendedRoleCookie === "AGENCY" || callbackUrlCookie.includes("/agencia");
         const wantsCreator =
-          intendedRoleCookie === "CREATOR" || callbackUrlCookie.includes("/panel");
-        const assignedRole = wantsCreator ? "CREATOR" : "CONSUMER";
+          !wantsAgency &&
+          (intendedRoleCookie === "CREATOR" || callbackUrlCookie.includes("/panel"));
+        const assignedRole = wantsAgency
+          ? "AGENCY"
+          : wantsCreator
+          ? "CREATOR"
+          : "CONSUMER";
         const assignedCountry =
           intendedCountryCookie && /^[A-Z]{2,5}$/i.test(intendedCountryCookie)
             ? intendedCountryCookie.toUpperCase()
@@ -134,7 +141,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const generatedUsername = `${baseName}_${uniqueSuffix}`;
           const newUserId = crypto.randomUUID();
 
-          // Registrar usuario automáticamente con el rol seleccionado (CREATOR o CONSUMER)
+          // Registrar usuario automáticamente con el rol seleccionado (CREATOR, AGENCY o CONSUMER)
           await db.insert(users).values({
             id: newUserId,
             username: generatedUsername,
@@ -146,7 +153,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             allowDownload: 0,
             image: user.image || null,
             country: assignedCountry,
-            gender: assignedGender,
+            gender: assignedRole === "AGENCY" ? null : assignedGender,
             createdAt: now,
             updatedAt: now,
           });
@@ -156,16 +163,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               ? (assignedGender as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
               : "MUJER";
 
-          await db.insert(profiles).values({
-            userId: newUserId,
-            displayName: user.name || generatedUsername,
-            bio: assignedRole === "CREATOR" ? "Creadora de contenido en KONTENIDO." : "¡Hola! Estoy usando KONTENIDO.",
-            subscriptionPriceKoin: assignedRole === "CREATOR" ? 10.0 : 0.0,
-            creatorCategory: creatorCat,
-            isPublished: 0,
-            createdAt: now,
-            updatedAt: now,
-          });
+          if (assignedRole === "AGENCY") {
+            const agencyDisplay = (user.name || generatedUsername).slice(0, 50);
+            await db.insert(agencies).values({
+              id: crypto.randomUUID(),
+              ownerUserId: newUserId,
+              name: agencyDisplay,
+              description: `Agencia oficial de talentos ${agencyDisplay} en KONTENIDO.`,
+              badgeText: agencyDisplay,
+              badgeColor: "from-indigo-500 via-purple-500 to-rose-500",
+              showBadge: 1,
+              commissionPct: 10.0,
+              status: "ACTIVE",
+              createdAt: now,
+            });
+          } else {
+            await db.insert(profiles).values({
+              userId: newUserId,
+              displayName: user.name || generatedUsername,
+              bio: assignedRole === "CREATOR" ? "Creadora de contenido en KONTENIDO." : "¡Hola! Estoy usando KONTENIDO.",
+              subscriptionPriceKoin: assignedRole === "CREATOR" ? 10.0 : 0.0,
+              creatorCategory: creatorCat,
+              isPublished: 0,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
 
           await db.insert(wallets).values({
             userId: newUserId,
@@ -183,22 +206,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.level = 0;
           user.allowDownload = 0;
           user.country = assignedCountry;
-          user.gender = assignedGender;
+          user.gender = assignedRole === "AGENCY" ? null : assignedGender;
         } else {
-          // Si ya existía como CONSUMER pero eligió registrarse como CREATOR, actualizar rol a CREATOR
+          // Si ya existía como CONSUMER pero eligió registrarse como CREATOR, actualizar rol y perfil
           let currentRole = existing.role;
+          let currentStatus = existing.status;
           if (wantsCreator && existing.role === "CONSUMER") {
             currentRole = "CREATOR";
+            currentStatus = existing.kycStatus === "APPROVED" ? "ACTIVE" : "PENDING";
             await db
               .update(users)
-              .set({ role: "CREATOR", updatedAt: now })
+              .set({ role: "CREATOR", status: currentStatus, updatedAt: now })
               .where(eq(users.id, existing.id));
+
+            const existingProfile = await db.query.profiles.findFirst({
+              where: eq(profiles.userId, existing.id),
+            });
+            if (existingProfile) {
+              if (existingProfile.subscriptionPriceKoin <= 0) {
+                await db
+                  .update(profiles)
+                  .set({
+                    subscriptionPriceKoin: 10.0,
+                    bio: "Creadora de contenido en KONTENIDO.",
+                    updatedAt: now,
+                  })
+                  .where(eq(profiles.userId, existing.id));
+              }
+            }
           }
 
           user.id = existing.id;
           user.username = existing.username;
           user.role = currentRole;
-          user.status = existing.status;
+          user.status = currentStatus;
           user.kycStatus = existing.kycStatus;
           user.level = existing.level;
           user.vipMembershipId = existing.vipMembershipId;

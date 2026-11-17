@@ -252,6 +252,18 @@ export default async function Navbar() {
                 </>
               )}
 
+              {effectiveRole === "CONSUMER" && (
+                <Link
+                  href="/panel"
+                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-rose-600/20 border border-rose-500/40 text-rose-300 hover:bg-rose-600 hover:text-white text-[11px] sm:text-xs font-bold transition whitespace-nowrap shrink-0"
+                  title="Activa tu Estudio para subir y vender contenido"
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                  <span className="sm:hidden">Vender</span>
+                  <span className="hidden sm:inline">Vender Contenido</span>
+                </Link>
+              )}
+
               {effectiveRole === "AGENCY" && (
                 <Link
                   href="/agencia"

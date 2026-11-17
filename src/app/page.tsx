@@ -489,13 +489,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
             <Link
-              href={session ? "/panel" : "/registro"}
+              href={session ? "/panel" : "/registro?rol=creador"}
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-7 py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-base transition shadow-xl shadow-rose-600/30 hover:scale-105"
             >
               <Sparkles className="w-5 h-5" />
               {session?.user.role === "CREATOR"
                 ? "Ir a mi Estudio (/panel)"
-                : "Quiero Crear Contenido"}
+                : "Quiero Crear y Vender"}
             </Link>
 
             <Link
@@ -691,7 +691,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 Regístrate ahora, completa tu validación de identidad y publica tus primeras fotos o paquetes para comenzar a recibir ingresos semanales.
               </p>
               <Link
-                href="/registro"
+                href="/registro?rol=creador"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-rose-600/30"
               >
                 Crear mi cuenta de Creadora

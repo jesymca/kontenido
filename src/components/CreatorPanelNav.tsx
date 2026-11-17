@@ -14,6 +14,8 @@ import {
   Eye,
   Flame,
   MessageCircleHeart,
+  Wallet,
+  Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +106,17 @@ export default function CreatorPanelNav({
       label: "Contrato Legal",
       href: "/panel/contrato",
       icon: FileCheck,
+    },
+    {
+      label: "Modo Fan / Billetera",
+      href: "/cuenta",
+      icon: Wallet,
+      exact: true,
+    },
+    {
+      label: "Mis Suscripciones",
+      href: "/cuenta/suscripciones",
+      icon: Heart,
     },
   ];
 

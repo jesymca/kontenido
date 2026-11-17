@@ -13,6 +13,7 @@ import { eq, desc } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
 import WalletTopupForm from "@/components/WalletTopupForm";
 import BuyVipButton from "@/components/BuyVipButton";
+import AccountModeCard from "@/components/AccountModeCard";
 import { cn, getVipBadgeClass } from "@/lib/utils";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { isVenezuelanUser, getCountryMeta } from "@/lib/countries";
@@ -94,44 +95,13 @@ export default async function CuentaPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
-      {/* Aviso especial si el usuario tiene rol de Creadora */}
-      {user?.role === "CREATOR" && (
-        <div className="mb-8 p-5 bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
-              <Sparkles className="w-6 h-6 animate-pulse" />
-            </div>
-            <div>
-              <span className="px-2 py-0.5 bg-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-wider rounded-md border border-rose-500/30">
-                Rol Creadora de Contenido
-              </span>
-              <h3 className="text-white font-black text-sm mt-1">
-                {isVenezuela
-                  ? "¿Deseas gestionar tus ganancias, publicaciones y retiros en Bolívares?"
-                  : "¿Deseas gestionar tus ganancias, publicaciones y retiros en USDT?"}
-              </h3>
-              <p className="text-rose-200/80 text-xs mt-0.5 max-w-xl leading-relaxed">
-                Esta sección es la Billetera de Consumo para recargar y suscribirte como fan. Tus herramientas de producción, estadísticas de ventas y cobros están en tu Estudio de Creadora.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href="/panel"
-              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-rose-600/30"
-            >
-              Ir a Mi Estudio
-            </Link>
-            <Link
-              href="/panel/pagos"
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-xl transition border border-amber-500/30"
-            >
-              {isVenezuela ? "Retiros de Dinero" : "Retiros (USDT)"}
-            </Link>
-          </div>
-        </div>
-      )}
+      {/* Tarjeta explicativa y selector bidireccional Vender vs Consumir */}
+      <AccountModeCard
+        currentRole={user?.role || session.user.role}
+        username={user?.username || session.user.username}
+        isVenezuela={isVenezuela}
+        variant="cuenta"
+      />
 
       {/* 1. CABECERA CON SALDO Y NIVEL */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl mb-8">
@@ -150,12 +120,12 @@ export default async function CuentaPage() {
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white">
-              {user?.role === "CREATOR" ? "Balance de Creadora KOIN" : "Mi Billetera KOIN"}
+              Mi Billetera KOIN y Compras
             </h1>
             <p className="text-xs text-slate-400 mt-1">
               {user?.role === "CREATOR"
-                ? "Tus ganancias acumuladas por suscripciones, contenido PPV y propinas."
-                : "Moneda interna respaldada 1:1 en USDT para suscripciones y compras."}
+                ? "Desde aquí también puedes recargar USDT, activar VIP y suscribirte a otros creadores. Tus ventas y retiros están en /panel/pagos."
+                : "Moneda interna respaldada 1:1 en USDT para suscripciones, compras y membresías VIP."}
             </p>
           </div>
 
@@ -175,9 +145,8 @@ export default async function CuentaPage() {
           </div>
         </div>
 
-        {/* Barra de progreso de nivel según inversión en USD (Solo para Consumidores) */}
-        {user?.role !== "CREATOR" && (
-          <div className="mt-8 pt-6 border-t border-slate-800/80">
+        {/* Barra de progreso de nivel según inversión en USD (disponible también si un creador consume contenido) */}
+        <div className="mt-8 pt-6 border-t border-slate-800/80">
             <div className="flex items-center justify-between text-xs mb-2">
               <span className="text-slate-300 font-semibold flex items-center gap-1.5">
                 <Award className="w-4 h-4 text-amber-400" />
@@ -219,12 +188,10 @@ export default async function CuentaPage() {
               </p>
             )}
           </div>
-        )}
       </div>
 
-      {/* Accesos directos a Suscripciones y Creadoras Favoritas (para Consumidores) */}
-      {user?.role !== "CREATOR" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      {/* Accesos directos de Consumo: Suscripciones, Favoritas, KOMESTIBLE y KOINCIDEN (para Consumidores y Creadoras que también consumen) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
           <Link
             href="/cuenta/suscripciones"
             className="p-4 bg-slate-900 border border-slate-800 hover:border-rose-500/40 rounded-2xl flex items-center justify-between transition group shadow-md"
@@ -305,11 +272,9 @@ export default async function CuentaPage() {
             <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-pink-400 group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
-      )}
 
-      {/* SECCIÓN EXCLUSIVA DE CONSUMIDORES: RECARGAS USDT Y MEMBRESÍAS VIP */}
-      {user?.role !== "CREATOR" ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+      {/* SECCIÓN DE CONSUMO (Para cualquier usuario que desee recargar o comprar VIP): RECARGAS USDT Y MEMBRESÍAS VIP */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
           {/* 2. RECARGAR SALDO CON USDT */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl">
             <div className="flex items-center gap-3 mb-5">
@@ -393,43 +358,6 @@ export default async function CuentaPage() {
             </div>
           </div>
         </div>
-      ) : (
-        /* ACCESO DIRECTO PARA CREADORAS: GESTIÓN DE INGRESOS Y RETIROS */
-        <div className="mb-10 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div>
-              <span className="text-xs font-black uppercase tracking-wider text-amber-400">
-                Centro de Producción de Creadoras
-              </span>
-              <h2 className="text-xl font-black text-white mt-1">
-                ¿Deseas retirar tus fondos o gestionar tu estudio?
-              </h2>
-              <p className="text-slate-400 text-xs sm:text-sm mt-1 max-w-xl leading-relaxed">
-                {isVenezuela
-                  ? "Como creadora, las recargas de USDT y compra de membresías VIP corresponden a la vista de los consumidores. Tus herramientas de producción, estadísticas de ventas y retiros en Bolívares o USDT están disponibles en tu Estudio y Centro de Pagos."
-                  : "Como creadora internacional, tus herramientas de producción, estadísticas de ventas y retiros directos en USDT están disponibles en tu Estudio y Centro de Pagos."}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <Link
-                href="/panel"
-                className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-rose-600/30 flex items-center gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                Ir a Mi Estudio
-              </Link>
-              <Link
-                href="/panel/pagos"
-                className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2"
-              >
-                <Coins className="w-4 h-4" />
-                {isVenezuela ? "Retiros (Bs. / USDT)" : "Retiros en USDT"}
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 4. HISTORIAL DE MOVIMIENTOS */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">

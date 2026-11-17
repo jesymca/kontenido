@@ -64,27 +64,48 @@ export default async function PanelLayout({
 
     if (!targetUser) return;
 
+    const existingProfile = await db.query.profiles.findFirst({
+      where: eq(profiles.userId, targetUser.id),
+    });
+
     await db
       .update(users)
       .set({
         role: "CREATOR",
-        status: "PENDING",
-        kycStatus: "NONE",
+        status: targetUser.kycStatus === "APPROVED" ? "ACTIVE" : "PENDING",
         updatedAt: now,
       })
       .where(eq(users.id, targetUser.id));
 
-    await db
-      .update(profiles)
-      .set({
+    if (existingProfile) {
+      const isPlaceholderBio =
+        !existingProfile.bio ||
+        existingProfile.bio.includes("Usuario en KONTENIDO") ||
+        existingProfile.bio.includes("Estoy usando KONTENIDO");
+      await db
+        .update(profiles)
+        .set({
+          bio: isPlaceholderBio ? "Creadora de contenido en KONTENIDO." : existingProfile.bio,
+          subscriptionPriceKoin:
+            existingProfile.subscriptionPriceKoin > 0 ? existingProfile.subscriptionPriceKoin : 10.0,
+          updatedAt: now,
+        })
+        .where(eq(profiles.userId, targetUser.id));
+    } else {
+      await db.insert(profiles).values({
+        userId: targetUser.id,
+        displayName: targetUser.username,
         bio: "Creadora de contenido en KONTENIDO.",
         subscriptionPriceKoin: 10.0,
+        isPublished: 0,
+        createdAt: now,
         updatedAt: now,
-      })
-      .where(eq(profiles.userId, targetUser.id));
+      });
+    }
 
     revalidatePath("/", "layout");
     revalidatePath("/panel");
+    revalidatePath("/panel/perfil");
     revalidatePath("/cuenta");
     redirect("/panel");
   }
@@ -95,20 +116,30 @@ export default async function PanelLayout({
         <div className="w-16 h-16 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-500 flex items-center justify-center mx-auto mb-5">
           <Sparkles className="w-8 h-8" />
         </div>
-        <h1 className="text-2xl font-black text-white tracking-tight">
-          Activa tu Estudio de Creadora
+        <span className="px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-black uppercase tracking-wider">
+          Estudio de Creador/a • Crear para Vender
+        </span>
+        <h1 className="text-2xl font-black text-white tracking-tight mt-3">
+          Activa tu Estudio para Vender Contenido
         </h1>
         <p className="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
-          Tu cuenta actual (<strong>@{dbUser.username}</strong>) fue registrada como Consumidor. Si deseas publicar contenido exclusivo, configurar tus 3 planes de suscripción y retirar ganancias{" "}
-          {isVenezuelanUser(dbUser.country) ? "en Bolívares o USDT" : "directamente en USDT"}, activa tu perfil de Creadora en un clic.
+          Tu cuenta (<strong>@{dbUser.username}</strong>) está actualmente solo en{" "}
+          <strong className="text-sky-300">Modo Consumidor</strong> (ver y comprar contenido). Si deseas subir tus propias fotos y videos, crear planes de suscripción y retirar ganancias{" "}
+          {isVenezuelanUser(dbUser.country) ? "en Bolívares o USDT" : "directamente en USDT"}, activa tu Estudio de Creador/a en 1 clic.
         </p>
 
         <div className="mt-6 p-4 bg-slate-950 border border-slate-800 rounded-2xl text-left text-xs text-slate-300 space-y-2">
           <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              Conservas intactos tu saldo KOIN, nivel, membresía VIP y suscripciones activas para seguir comprando en <strong className="text-white">/cuenta</strong>.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
             <span>
-              Tu cuenta pasará a estado <strong>Falta Verificar</strong> hasta validar tu{" "}
-              {isVenezuelanUser(dbUser.country) ? "cédula de identidad" : "documento oficial o pasaporte"}.
+              Para cobrar tus ventas se requerirá validar tu{" "}
+              {isVenezuelanUser(dbUser.country) ? "cédula de identidad" : "documento oficial o pasaporte"} (KYC).
             </span>
           </div>
         </div>
@@ -119,7 +150,7 @@ export default async function PanelLayout({
             className="w-full py-3.5 px-6 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-sm transition shadow-lg shadow-rose-600/30 flex items-center justify-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4" />
-            Convertir mi cuenta en Creadora de Contenido
+            Activar Modo Creador/a (Crear y Vender)
             <ArrowRight className="w-4 h-4" />
           </button>
 
@@ -127,7 +158,7 @@ export default async function PanelLayout({
             href="/cuenta"
             className="block w-full py-3 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
           >
-            Continuar como Consumidor en mi Billetera
+            Seguir solo como Consumidor en mi Billetera
           </Link>
         </form>
       </div>

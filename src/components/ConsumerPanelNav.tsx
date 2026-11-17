@@ -84,6 +84,9 @@ export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProp
       <div className="container mx-auto px-4 py-2 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
         {/* Menú Principal del Consumidor */}
         <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <span className="hidden xl:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 rounded-lg mr-1 shrink-0">
+            Modo Consumidor
+          </span>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = item.exact
@@ -94,7 +97,7 @@ export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProp
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition shrink-0 ${
                   isActive
                     ? "bg-rose-600 text-white shadow-sm shadow-rose-600/30"
                     : "text-slate-300 hover:text-white hover:bg-slate-800/80"
@@ -105,6 +108,15 @@ export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProp
               </Link>
             );
           })}
+
+          <Link
+            href="/panel"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition shrink-0 bg-rose-600/15 text-rose-300 border border-rose-500/40 hover:bg-rose-600 hover:text-white"
+            title="Cambia o activa tu Estudio para crear y vender contenido"
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span>Crear y Vender</span>
+          </Link>
         </nav>
 
         {/* Acceso Rápido Directo a los Perfiles Suscritos */}

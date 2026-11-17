@@ -4,7 +4,9 @@ import { profiles, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import ProfileForm from "@/components/ProfileForm";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
+import AccountModeCard from "@/components/AccountModeCard";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { isVenezuelanUser } from "@/lib/countries";
 import { Settings, Eye } from "lucide-react";
 import Link from "next/link";
 
@@ -64,6 +66,13 @@ export default async function PerfilPage() {
             initialCountry={user?.country || "VE"}
           />
         </div>
+
+        <AccountModeCard
+          currentRole={user?.role || session.user.role}
+          username={session.user.username}
+          isVenezuela={isVenezuelanUser(user?.country)}
+          variant="panel-perfil"
+        />
       </div>
     </div>
   );
