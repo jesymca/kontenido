@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { reviewKycAction } from "@/actions/admin";
 import {
   Check,
@@ -8,6 +9,8 @@ import {
   ShieldCheck,
   ExternalLink,
   AlertCircle,
+  CheckCircle2,
+  Loader2,
   ZoomIn,
   ZoomOut,
   RotateCw,
@@ -41,8 +44,44 @@ interface Props {
   documents: KycItem[];
 }
 
+const REJECTION_PRESETS = [
+  "Foto borrosa o ilegible",
+  "Documento no coincide con la selfie",
+  "Documento vencido o incompleto",
+  "No cumple mayoría de edad (+18)",
+  "Falta cara frontal o reverso nítido",
+];
+
 export default function AdminKycReview({ documents }: Props) {
+  const router = useRouter();
+  const [docs, setDocs] = useState<KycItem[]>(documents);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  // Estado de notificación in-app (sin alert nativo)
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  // Estado del Modal personalizado de Aprobación / Rechazo (sin confirm/prompt nativos)
+  const [decisionModal, setDecisionModal] = useState<{
+    type: "APPROVED" | "REJECTED";
+    doc: KycItem;
+    reason: string;
+    formError: string | null;
+  } | null>(null);
+
+  // Sincronizar si cambian props del servidor
+  useEffect(() => {
+    setDocs(documents);
+  }, [documents]);
+
+  // Auto-ocultar notificación de éxito/error después de unos segundos
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = setTimeout(() => setFeedback(null), 5000);
+    return () => clearTimeout(timer);
+  }, [feedback]);
 
   // Estados para el Modal de Inspección de Fotos en Alta Resolución
   const [modalData, setModalData] = useState<{
@@ -59,14 +98,24 @@ export default function AdminKycReview({ documents }: Props) {
   const [zoom, setZoom] = useState<number>(1);
   const [rotation, setRotation] = useState<number>(0);
 
-  // Atajos de teclado para el modal (ESC para cerrar, Flechas para navegar, R para rotar)
+  // Atajos de teclado para modales (ESC para cerrar, Flechas para navegar, R para rotar en lightbox)
   useEffect(() => {
-    if (!modalData) return;
+    if (!modalData && !decisionModal) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setModalData(null);
-      } else if (e.key === "ArrowLeft") {
+        if (decisionModal && !loadingId) {
+          setDecisionModal(null);
+          return;
+        }
+        if (modalData) {
+          setModalData(null);
+        }
+        return;
+      }
+
+      if (!modalData || decisionModal) return;
+      if (e.key === "ArrowLeft") {
         navigateModal(-1);
       } else if (e.key === "ArrowRight") {
         navigateModal(1);
@@ -77,7 +126,7 @@ export default function AdminKycReview({ documents }: Props) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [modalData]);
+  }, [modalData, decisionModal, loadingId]);
 
   const openModal = (doc: KycItem, index: number) => {
     const titles = ["1. Cédula Frente", "2. Cédula Reverso", "3. Selfie con Cédula"];
@@ -129,42 +178,119 @@ export default function AdminKycReview({ documents }: Props) {
     setRotation(0);
   };
 
-  const handleApprove = async (id: string, username: string) => {
-    if (!confirm(`¿Aprobar validación KYC y activar la cuenta de creadora para @${username}?`)) return;
+  const openApproveModal = (doc: KycItem) => {
+    setFeedback(null);
+    setDecisionModal({
+      type: "APPROVED",
+      doc,
+      reason: "",
+      formError: null,
+    });
+  };
 
-    setLoadingId(id);
+  const openRejectModal = (doc: KycItem) => {
+    setFeedback(null);
+    setDecisionModal({
+      type: "REJECTED",
+      doc,
+      reason: "Foto borrosa o documento no coincide con selfie",
+      formError: null,
+    });
+  };
+
+  const handleConfirmDecision = async () => {
+    if (!decisionModal) return;
+
+    const { type, doc, reason } = decisionModal;
+    const trimmedReason = reason.trim();
+
+    if (type === "REJECTED" && !trimmedReason) {
+      setDecisionModal((prev) =>
+        prev ? { ...prev, formError: "Debes indicar el motivo del rechazo antes de continuar." } : null
+      );
+      return;
+    }
+
+    setLoadingId(doc.id);
+    setDecisionModal((prev) => (prev ? { ...prev, formError: null } : null));
+
     try {
-      const res = await reviewKycAction(id, "APPROVED");
-      if (res.error) {
-        alert(res.error);
+      const res = await reviewKycAction(
+        doc.id,
+        type,
+        type === "REJECTED" ? trimmedReason : undefined
+      );
+
+      if (res?.error) {
+        setDecisionModal((prev) => (prev ? { ...prev, formError: res.error } : null));
+        setFeedback({ type: "error", message: res.error });
         setLoadingId(null);
         return;
       }
-      window.location.reload();
-    } catch (e) {
-      alert("Error aprobando KYC.");
+
+      setDocs((prev) =>
+        prev.map((item) =>
+          item.id === doc.id
+            ? {
+                ...item,
+                status: type,
+                rejectionReason: type === "REJECTED" ? trimmedReason : null,
+              }
+            : item
+        )
+      );
+      setDecisionModal(null);
       setLoadingId(null);
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    const reason = prompt("Ingresa el motivo del rechazo:", "Foto borrosa o documento no coincide con selfie");
-    if (!reason) return;
-
-    setLoadingId(id);
-    try {
-      await reviewKycAction(id, "REJECTED", reason);
-      window.location.reload();
-    } catch (e) {
-      alert("Error rechazando KYC.");
+      setFeedback({
+        type: "success",
+        message:
+          type === "APPROVED"
+            ? `Validación KYC de @${doc.username} aprobada y cuenta activada correctamente.`
+            : `Solicitud KYC de @${doc.username} rechazada correctamente.`,
+      });
+      router.refresh();
+    } catch {
+      const fallbackError =
+        type === "APPROVED" ? "Error aprobando la validación KYC." : "Error rechazando la validación KYC.";
+      setDecisionModal((prev) => (prev ? { ...prev, formError: fallbackError } : null));
+      setFeedback({ type: "error", message: fallbackError });
       setLoadingId(null);
     }
   };
 
   return (
     <div className="space-y-6">
-      {documents.length > 0 ? (
-        documents.map((doc) => (
+      {feedback && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-xs sm:text-sm font-semibold shadow-lg transition-all ${
+            feedback.type === "success"
+              ? "bg-emerald-950/90 border-emerald-500/40 text-emerald-300"
+              : "bg-red-950/90 border-red-500/40 text-red-300"
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {feedback.type === "success" ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            )}
+            <span>{feedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
+            className="p-1 rounded-lg hover:bg-white/10 transition shrink-0"
+            aria-label="Cerrar notificación"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {docs.length > 0 ? (
+        docs.map((doc) => (
           <div
             key={doc.id}
             className="p-6 bg-slate-900 border border-slate-800 rounded-3xl shadow-xl flex flex-col gap-5"
@@ -329,16 +455,16 @@ export default function AdminKycReview({ documents }: Props) {
                 <button
                   type="button"
                   disabled={loadingId === doc.id}
-                  onClick={() => handleReject(doc.id)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-xl text-xs font-semibold transition"
+                  onClick={() => openRejectModal(doc)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-xl text-xs font-semibold transition disabled:opacity-50"
                 >
                   Rechazar
                 </button>
                 <button
                   type="button"
                   disabled={loadingId === doc.id}
-                  onClick={() => handleApprove(doc.id, doc.username)}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5"
+                  onClick={() => openApproveModal(doc)}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
                   Aprobar Mayoría de Edad
@@ -350,6 +476,170 @@ export default function AdminKycReview({ documents }: Props) {
       ) : (
         <div className="text-center py-12 text-slate-500 text-xs">
           No hay solicitudes de KYC pendientes por revisar.
+        </div>
+      )}
+
+      {/* MODAL PERSONALIZADO DE CONFIRMACIÓN / RECHAZO KYC (SIN ALERT/CONFIRM/PROMPT NATIVOS) */}
+      {decisionModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => {
+            if (!loadingId) setDecisionModal(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="kyc-decision-title"
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+                    decisionModal.type === "APPROVED"
+                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                      : "bg-red-500/15 border-red-500/30 text-red-400"
+                  }`}
+                >
+                  {decisionModal.type === "APPROVED" ? (
+                    <ShieldCheck className="w-5 h-5" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 id="kyc-decision-title" className="text-base sm:text-lg font-black text-white">
+                    {decisionModal.type === "APPROVED"
+                      ? "Aprobar Verificación KYC"
+                      : "Rechazar Verificación KYC"}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Creadora:{" "}
+                    <strong className="text-rose-400 font-mono">@{decisionModal.doc.username}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={Boolean(loadingId)}
+                onClick={() => setDecisionModal(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition disabled:opacity-50"
+                aria-label="Cerrar ventana"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {decisionModal.type === "APPROVED" ? (
+              <div className="space-y-3">
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  ¿Confirmas aprobar la validación de identidad y activar la cuenta de creadora para{" "}
+                  <strong className="text-white">@{decisionModal.doc.username}</strong>?
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Documento</span>
+                    <span className="text-amber-300 font-bold">
+                      {decisionModal.doc.documentType} · {decisionModal.doc.extractedCedula || "Sin ID"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Nombre</span>
+                    <span className="text-white font-semibold">
+                      {decisionModal.doc.extractedFullName || "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-300">
+                  Motivo del rechazo (visible para la creadora)
+                </label>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {REJECTION_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setDecisionModal((prev) =>
+                          prev ? { ...prev, reason: preset, formError: null } : null
+                        )
+                      }
+                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition font-medium ${
+                        decisionModal.reason.trim() === preset
+                          ? "bg-red-500/20 border-red-500/50 text-red-300"
+                          : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={decisionModal.reason}
+                  onChange={(e) =>
+                    setDecisionModal((prev) =>
+                      prev ? { ...prev, reason: e.target.value, formError: null } : null
+                    )
+                  }
+                  placeholder="Describe claramente por qué se rechaza el documento..."
+                  className="w-full rounded-2xl bg-slate-950 border border-slate-800 focus:border-red-500/60 focus:outline-none px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-600 resize-none"
+                />
+              </div>
+            )}
+
+            {decisionModal.formError && (
+              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-red-950/70 border border-red-500/40 text-red-300 text-xs font-semibold">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{decisionModal.formError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={Boolean(loadingId)}
+                onClick={() => setDecisionModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(loadingId)}
+                onClick={handleConfirmDecision}
+                className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md disabled:opacity-50 ${
+                  decisionModal.type === "APPROVED"
+                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30"
+                    : "bg-red-600 hover:bg-red-700 shadow-red-600/30"
+                }`}
+              >
+                {loadingId ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Procesando...</span>
+                  </>
+                ) : decisionModal.type === "APPROVED" ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Confirmar Aprobación</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="w-3.5 h-3.5" />
+                    <span>Confirmar Rechazo</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
