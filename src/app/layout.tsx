@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     template: "%s | KONTENIDO",
   },
   description:
-    "Plataforma líder en Venezuela para creadores de contenido, fotos y videos exclusivos. Monetiza con KOIN (USDT) y recibe tus pagos directo en PagoMóvil o Bancos Nacionales.",
+    "Plataforma líder en Venezuela y Latinoamérica para creadores de contenido, fotos y videos exclusivos. Monetiza con KOIN (USDT), descubre en KOMESTIBLE y recibe tus pagos directo en USDT, PagoMóvil o Bancos Nacionales.",
   applicationName: "KONTENIDO",
   authors: [{ name: "KONTENIDO", url: defaultBaseUrl }],
   generator: "Next.js",

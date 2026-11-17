@@ -17,6 +17,8 @@ declare module "next-auth" {
       vipMembershipId?: string | null;
       allowDownload: number;
       suspensionReason?: string | null;
+      country?: string;
+      gender?: string | null;
     } & DefaultSession["user"];
   }
 
@@ -30,6 +32,8 @@ declare module "next-auth" {
     vipMembershipId?: string | null;
     allowDownload: number;
     suspensionReason?: string | null;
+    country?: string;
+    gender?: string | null;
   }
 }
 
@@ -44,5 +48,7 @@ declare module "next-auth/jwt" {
     vipMembershipId?: string | null;
     allowDownload: number;
     suspensionReason?: string | null;
+    country?: string;
+    gender?: string | null;
   }
 }

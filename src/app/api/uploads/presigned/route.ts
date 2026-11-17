@@ -53,6 +53,11 @@ export async function POST(req: Request) {
       key = `creators/${userId}/kyc/${uniqueId}/${filename}`;
     } else if (category === "chat") {
       key = `creators/${userId}/chat/${uniqueId}/${filename}`;
+    } else if (category === "komestible") {
+      if (!isImage) {
+        return NextResponse.json({ error: "Solo se permiten imágenes en KOMESTIBLE." }, { status: 400 });
+      }
+      key = `komestible/${userId}/${uniqueId}.${fileExt}`;
     } else {
       key = `creators/${userId}/posts/${uniqueId}/original/${filename}`;
     }

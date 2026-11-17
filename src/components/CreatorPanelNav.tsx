@@ -12,6 +12,8 @@ import {
   ShieldCheck,
   FileCheck,
   Eye,
+  Flame,
+  MessageCircleHeart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,7 @@ interface Props {
   username?: string;
   kycStatus?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
   inHeader?: boolean;
+  isVenezuela?: boolean;
 }
 
 /**
@@ -26,7 +29,12 @@ interface Props {
  * Se despliega de forma permanente en la navegación superior para que la creadora
  * visualice todo su menú de herramientas en cualquier momento.
  */
-export default function CreatorPanelNav({ username, kycStatus, inHeader = false }: Props) {
+export default function CreatorPanelNav({
+  username,
+  kycStatus,
+  inHeader = false,
+  isVenezuela = true,
+}: Props) {
   const pathname = usePathname();
 
   // Si se invoca desde el interior de una página individual, no duplicar ya que está fijo en el Navbar global
@@ -53,7 +61,7 @@ export default function CreatorPanelNav({ username, kycStatus, inHeader = false 
       icon: Settings,
     },
     {
-      label: "Retiros (Bs.)",
+      label: isVenezuela ? "Retiros (Bs.)" : "Retiros (USDT)",
       href: "/panel/pagos",
       icon: Coins,
     },
@@ -66,6 +74,16 @@ export default function CreatorPanelNav({ username, kycStatus, inHeader = false 
       label: "Mensajería",
       href: "/panel/mensajes",
       icon: MessageCircle,
+    },
+    {
+      label: "KOMESTIBLE",
+      href: "/komestible",
+      icon: Flame,
+    },
+    {
+      label: "KOINCIDEN",
+      href: "/koinciden",
+      icon: MessageCircleHeart,
     },
     {
       label: "Verificación (KYC)",

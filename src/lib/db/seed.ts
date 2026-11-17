@@ -77,6 +77,13 @@ async function seed() {
     { key: "usdt_trc20_address", value: "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb", description: "Dirección USDT TRC20 para recargas" },
     { key: "usdt_bep20_address", value: "0x71C83638209121a91e57c61775e54d5885dc8bA8", description: "Dirección USDT BEP20 para recargas" },
     { key: "vip_download_min_spent", value: "100.0", description: "Inversión acumulada mínima en $ para permitir descarga a usuarios VIP" },
+    { key: "komestible_enabled", value: "1", description: "Habilita (1) o deshabilita (0) la sección gratuita KOMESTIBLE" },
+    { key: "komestible_male_likes_limit", value: "10", description: "Cantidad de Likes permitidos para usuarios registrados como HOMBRE en KOMESTIBLE" },
+    { key: "komestible_male_limit_period", value: "DAILY", description: "Período del límite de Likes para HOMBRES: DAILY, WEEKLY o TOTAL" },
+    { key: "komestible_other_likes_limit", value: "0", description: "Límite de Likes para otros géneros (0 = ilimitado)" },
+    { key: "komestible_max_photos_per_user", value: "6", description: "Máximo de fotos por usuario en KOMESTIBLE" },
+    { key: "komestible_require_moderation", value: "0", description: "1 si las fotos de KOMESTIBLE requieren aprobación de SUPER_ADMIN" },
+    { key: "komestible_vip_unlimited", value: "0", description: "1 si membresías VIP otorgan Likes ilimitados a HOMBRES" },
   ];
 
   for (const s of defaultSettings) {

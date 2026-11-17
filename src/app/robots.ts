@@ -7,12 +7,13 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/registro", "/login", "/[username]"],
+        allow: ["/", "/komestible", "/registro", "/login", "/[username]"],
         disallow: [
           "/panel/",
           "/admin/",
           "/api/",
           "/cuenta/",
+          "/koinciden/",
           "/suspendido",
         ],
       },

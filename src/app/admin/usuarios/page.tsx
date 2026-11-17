@@ -4,6 +4,7 @@ import { desc } from "drizzle-orm";
 import AdminUsersTable from "@/components/AdminUsersTable";
 import { Users, AlertCircle } from "lucide-react";
 import { ensureInteractionsSchema } from "@/lib/db/initInteractions";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function AdminUsuariosPage() {
 
   try {
     await ensureInteractionsSchema();
+    await ensureKomestibleSchema();
 
     allUsers = await db.query.users.findMany({
       orderBy: [desc(users.createdAt)],

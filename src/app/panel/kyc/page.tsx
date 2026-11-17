@@ -4,19 +4,24 @@ import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
 import CedulaOcrScanner from "@/components/CedulaOcrScanner";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { getCountryMeta, isVenezuelanUser } from "@/lib/countries";
 import { ShieldCheck } from "lucide-react";
 
 /**
  * Pantalla de Validación de Identidad (KYC) y Mayoría de Edad para Creadoras
- * Integra el motor OCR de jesymca/reconocimiento_cedula para extracción automática.
  */
 export default async function KycPage() {
+  await ensureKomestibleSchema();
   const session = await auth();
   const currentUser = session?.user
     ? await db.query.users.findFirst({
         where: eq(users.id, session.user.id),
       })
     : null;
+
+  const isVenezuela = isVenezuelanUser(currentUser?.country);
+  const countryMeta = getCountryMeta(currentUser?.country);
 
   return (
     <div>
@@ -36,13 +41,18 @@ export default async function KycPage() {
                 Validación de Identidad y Mayoría de Edad
               </h1>
               <p className="text-slate-400 text-xs sm:text-sm mt-0.5">
-                Requisito obligatorio para creadoras venezolanas en KONTENIDO.
+                {isVenezuela
+                  ? "Requisito obligatorio para creadoras en Venezuela (Cédula VE / Pasaporte)."
+                  : `Requisito obligatorio para creadoras internacionales (${countryMeta.flag} ${countryMeta.name}).`}
               </p>
             </div>
           </div>
         </div>
 
-        <CedulaOcrScanner />
+        <CedulaOcrScanner
+          isVenezuela={isVenezuela}
+          countryName={`${countryMeta.flag} ${countryMeta.name}`}
+        />
       </div>
     </div>
   );

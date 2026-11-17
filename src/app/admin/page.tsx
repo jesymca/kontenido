@@ -18,6 +18,7 @@ import {
   ArrowRight,
   Shield,
   Sparkles,
+  Flame,
 } from "lucide-react";
 
 /**
@@ -165,6 +166,27 @@ export default async function AdminDashboardPage() {
           </div>
           <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-rose-400">
             <span>Administrar badges</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/komestible"
+          className="p-6 bg-slate-900 border border-rose-500/30 rounded-3xl hover:border-rose-500/60 transition flex flex-col justify-between group shadow-lg"
+        >
+          <div>
+            <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center mb-4">
+              <Flame className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-white mb-1 group-hover:text-rose-400 transition">
+              KOMESTIBLE & KOINCIDEN
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Configura el límite de Likes para HOMBRES, modera fotos gratuitas, asigna bonos y supervisa matches mutuos.
+            </p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-rose-400">
+            <span>Controlar sección gratuita</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>

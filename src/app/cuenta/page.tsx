@@ -14,6 +14,8 @@ import UserLevelBadge from "@/components/UserLevelBadge";
 import WalletTopupForm from "@/components/WalletTopupForm";
 import BuyVipButton from "@/components/BuyVipButton";
 import { cn, getVipBadgeClass } from "@/lib/utils";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { isVenezuelanUser, getCountryMeta } from "@/lib/countries";
 import Link from "next/link";
 import {
   Coins,
@@ -35,6 +37,7 @@ import {
  * Gestiona recargas USDT, saldo KOIN, nivel del usuario (0 al 100) y membresías VIP.
  */
 export default async function CuentaPage() {
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user) return null;
 
@@ -44,6 +47,8 @@ export default async function CuentaPage() {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });
+  const isVenezuela = isVenezuelanUser(user?.country);
+  const countryMeta = getCountryMeta(user?.country);
 
   // 2. Obtener billetera
   const wallet = await db.query.wallets.findFirst({
@@ -101,10 +106,12 @@ export default async function CuentaPage() {
                 Rol Creadora de Contenido
               </span>
               <h3 className="text-white font-black text-sm mt-1">
-                ¿Deseas gestionar tus ganancias, publicaciones y retiros en Bolívares?
+                {isVenezuela
+                  ? "¿Deseas gestionar tus ganancias, publicaciones y retiros en Bolívares?"
+                  : "¿Deseas gestionar tus ganancias, publicaciones y retiros en USDT?"}
               </h3>
               <p className="text-rose-200/80 text-xs mt-0.5 max-w-xl leading-relaxed">
-                Esta sección es la Billetera de Consumo para recargar y suscribirte como fan. Tus herramientas de producción, estadísticas de ventas y cobros semanales están en tu Estudio de Creadora.
+                Esta sección es la Billetera de Consumo para recargar y suscribirte como fan. Tus herramientas de producción, estadísticas de ventas y cobros están en tu Estudio de Creadora.
               </p>
             </div>
           </div>
@@ -120,7 +127,7 @@ export default async function CuentaPage() {
               href="/panel/pagos"
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-xl transition border border-amber-500/30"
             >
-              Retiros de Dinero
+              {isVenezuela ? "Retiros de Dinero" : "Retiros (USDT)"}
             </Link>
           </div>
         </div>
@@ -130,7 +137,7 @@ export default async function CuentaPage() {
       <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl mb-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div>
-            <div className="mb-2">
+            <div className="mb-2 flex items-center gap-2 flex-wrap">
               <UserLevelBadge
                 level={currentLevelNum}
                 username={user?.username || session.user.username}
@@ -138,6 +145,9 @@ export default async function CuentaPage() {
                 kycStatus={user?.kycStatus}
                 showRoleBadge
               />
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-950 border border-slate-700 text-slate-300">
+                {countryMeta.flag} {countryMeta.name} {!isVenezuela && "• 100% USDT"}
+              </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white">
               {user?.role === "CREATOR" ? "Balance de Creadora KOIN" : "Mi Billetera KOIN"}
@@ -254,6 +264,46 @@ export default async function CuentaPage() {
             </div>
             <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-1 transition-transform" />
           </Link>
+
+          <Link
+            href="/komestible"
+            className="p-4 bg-gradient-to-r from-rose-950/50 to-slate-900 border border-rose-500/30 hover:border-rose-500/60 rounded-2xl flex items-center justify-between transition group shadow-md"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
+                <Flame className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-sm font-bold text-white group-hover:text-rose-400 transition block">
+                  KOMESTIBLE (Gratis)
+                </span>
+                <span className="text-xs text-slate-400">
+                  Sube fotos para valorar, desliza y perfilate como creadora
+                </span>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-1 transition-transform" />
+          </Link>
+
+          <Link
+            href="/koinciden"
+            className="p-4 bg-gradient-to-r from-pink-950/40 to-slate-900 border border-pink-500/30 hover:border-pink-500/60 rounded-2xl flex items-center justify-between transition group shadow-md"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-pink-500/15 text-pink-400 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-sm font-bold text-white group-hover:text-pink-400 transition block">
+                  Espacio KOINCIDEN
+                </span>
+                <span className="text-xs text-slate-400">
+                  Encuentra tus matches mutuos y conversa gratis
+                </span>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-pink-400 group-hover:translate-x-1 transition-transform" />
+          </Link>
         </div>
       )}
 
@@ -355,7 +405,9 @@ export default async function CuentaPage() {
                 ¿Deseas retirar tus fondos o gestionar tu estudio?
               </h2>
               <p className="text-slate-400 text-xs sm:text-sm mt-1 max-w-xl leading-relaxed">
-                Como creadora, las recargas de USDT y compra de membresías VIP corresponden a la vista de los consumidores. Tus herramientas de producción, estadísticas de ventas y retiros en Bolívares están disponibles en tu Estudio y Centro de Pagos.
+                {isVenezuela
+                  ? "Como creadora, las recargas de USDT y compra de membresías VIP corresponden a la vista de los consumidores. Tus herramientas de producción, estadísticas de ventas y retiros en Bolívares o USDT están disponibles en tu Estudio y Centro de Pagos."
+                  : "Como creadora internacional, tus herramientas de producción, estadísticas de ventas y retiros directos en USDT están disponibles en tu Estudio y Centro de Pagos."}
               </p>
             </div>
 
@@ -372,7 +424,7 @@ export default async function CuentaPage() {
                 className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2"
               >
                 <Coins className="w-4 h-4" />
-                Retiros en Bolívares
+                {isVenezuela ? "Retiros (Bs. / USDT)" : "Retiros en USDT"}
               </Link>
             </div>
           </div>

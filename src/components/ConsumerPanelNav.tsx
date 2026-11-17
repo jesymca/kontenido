@@ -10,6 +10,8 @@ import {
   Sparkles,
   ExternalLink,
   Bookmark,
+  Flame,
+  MessageCircleHeart,
 } from "lucide-react";
 
 export interface SubscribedCreatorItem {
@@ -38,6 +40,18 @@ export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProp
       label: "Explorar Creadoras",
       icon: Compass,
       exact: true,
+    },
+    {
+      href: "/komestible",
+      label: "KOMESTIBLE",
+      icon: Flame,
+      exact: false,
+    },
+    {
+      href: "/koinciden",
+      label: "KOINCIDEN",
+      icon: MessageCircleHeart,
+      exact: false,
     },
     {
       href: "/cuenta/suscripciones",

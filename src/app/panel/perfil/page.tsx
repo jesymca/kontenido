@@ -4,15 +4,17 @@ import { profiles, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import ProfileForm from "@/components/ProfileForm";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { Settings, Eye } from "lucide-react";
 import Link from "next/link";
 
 /**
  * Pantalla de Configuración de Perfil de Creadora (/panel/perfil)
  * Permite configurar Foto de Perfil, Foto de Banner, Nombre de Usuario,
- * Texto de Bienvenida, Precio y Estado de Cédula (KYC).
+ * Texto de Bienvenida, País, Precio y Estado de Identidad (KYC).
  */
 export default async function PerfilPage() {
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user) return null;
 
@@ -59,6 +61,7 @@ export default async function PerfilPage() {
             profile={profile}
             username={session.user.username}
             kycStatus={user?.kycStatus || "NONE"}
+            initialCountry={user?.country || "VE"}
           />
         </div>
       </div>

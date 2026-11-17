@@ -61,8 +61,8 @@ export default auth((req) => {
       }
     }
 
-    // 5. Proteger rutas de Consumidor / Billetera (/cuenta/*)
-    if (pathname.startsWith("/cuenta")) {
+    // 5. Proteger rutas de Consumidor / Billetera (/cuenta/*) y Espacio de Matches (/koinciden/*)
+    if (pathname.startsWith("/cuenta") || pathname.startsWith("/koinciden")) {
       if (!user) {
         return NextResponse.redirect(new URL(`/login?callbackUrl=${encodeURIComponent(pathname)}`, nextUrl));
       }

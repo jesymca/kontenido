@@ -7,22 +7,27 @@ import CreatorWithdrawalHub from "@/components/CreatorWithdrawalHub";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
 import { getDolarRates } from "@/lib/dolarapi";
 import { getCreatorCommissionTier } from "@/lib/commissions";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { isVenezuelanUser, getCountryMeta } from "@/lib/countries";
 import { Wallet, Landmark, DollarSign } from "lucide-react";
 
 /**
- * Pantalla de Gestión de Retiros, Liquidaciones en Bolívares (VES),
+ * Pantalla de Gestión de Retiros (Bolívares VES para VE / USDT directo para Internacional),
  * Suscriptores y Métodos de Cobro de la Creadora (/panel/pagos)
  */
 export default async function PagosPage() {
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user) return null;
 
   const userId = session.user.id;
 
-  // 0. Obtener usuario actual para estatus KYC
+  // 0. Obtener usuario actual para estatus KYC y País
   const currentUser = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });
+  const isVenezuela = isVenezuelanUser(currentUser?.country);
+  const countryMeta = getCountryMeta(currentUser?.country);
 
   // 1. Obtener billetera de la creadora
   const wallet = await db.query.wallets.findFirst({
@@ -40,13 +45,21 @@ export default async function PagosPage() {
   // 3. Evaluar tier de comisión (10%, 15%, 20%) según el nivel de la creadora y volumen general acumulado
   const tierInfo = getCreatorCommissionTier(totalEarnedKoin, settingsMap, currentUser?.level);
 
-  // 4. Consultar tasa de Dólar Paralelo en tiempo real desde ve.dolarapi.com
-  const dolarInfo = await getDolarRates(fallbackRate);
+  // 4. Consultar tasa de Dólar Paralelo en tiempo real desde ve.dolarapi.com (solo si es Venezuela)
+  const dolarInfo = isVenezuela
+    ? await getDolarRates(fallbackRate)
+    : {
+        paralelo: 1,
+        fechaActualizacion: new Date().toISOString(),
+        fuente: "USDT 1:1 Internacional",
+      };
 
-  // 5. Obtener los 30 bancos venezolanos y métodos de cobro de la creadora
-  const allBanks = await db.query.banks.findMany({
-    orderBy: (banks, { asc }) => [asc(banks.id)],
-  });
+  // 5. Obtener los 30 bancos venezolanos (para VE) y métodos de cobro de la creadora
+  const allBanks = isVenezuela
+    ? await db.query.banks.findMany({
+        orderBy: (banks, { asc }) => [asc(banks.id)],
+      })
+    : [];
 
   const userMethods = await db.query.paymentMethods.findMany({
     where: eq(paymentMethods.creatorId, userId),
@@ -110,12 +123,19 @@ export default async function PagosPage() {
       <div className="container mx-auto px-4 pb-12 max-w-5xl space-y-10">
         {/* Cabecera Principal */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
+        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5 flex-wrap">
           <Wallet className="w-7 h-7 text-rose-500" />
-          Centro de Pagos y Retiros en Bolívares
+          {isVenezuela
+            ? "Centro de Pagos y Retiros en Bolívares"
+            : "Centro de Pagos y Retiros en USDT"}
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-slate-300">
+            {countryMeta.flag} {countryMeta.name}
+          </span>
         </h1>
         <p className="text-slate-400 text-xs sm:text-sm mt-1">
-          Solicita retiros calculados según el Valor Paralelo en tiempo real, monitorea tus liquidaciones bancarias y revisa los pagos de tus suscriptores.
+          {isVenezuela
+            ? "Solicita retiros calculados según el Valor Paralelo en tiempo real, monitorea tus liquidaciones bancarias y revisa los pagos de tus suscriptores."
+            : "Solicita tus retiros internacionales directamente en USDT (1 KOIN = 1 USDT) sin conversión a moneda local y revisa los pagos de tus suscriptores."}
         </p>
       </div>
 
@@ -130,6 +150,8 @@ export default async function PagosPage() {
         paymentMethods={userMethods}
         payouts={creatorPayouts}
         subscribers={enrichedSubscribers}
+        isVenezuela={isVenezuela}
+        countryLabel={`${countryMeta.flag} ${countryMeta.name}`}
       />
 
       {/* Sección Inferior: Administración de Cuentas y Métodos de Cobro */}
@@ -137,14 +159,22 @@ export default async function PagosPage() {
         <div className="mb-6">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Landmark className="w-5 h-5 text-emerald-400" />
-            Configuración de Métodos de Cobro (Venezuela y Cripto)
+            {isVenezuela
+              ? "Configuración de Métodos de Cobro (Venezuela y Cripto)"
+              : "Configuración de Métodos de Cobro Internacionales (USDT)"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Agrega o actualiza tus cuentas bancarias de los 30 bancos oficiales venezolanos, PagoMóvil o billetera Binance USDT.
+            {isVenezuela
+              ? "Agrega o actualiza tus cuentas bancarias de los 30 bancos oficiales venezolanos, PagoMóvil, Binance Pay o Wallet USDT."
+              : "Configura tu Binance Pay ID / correo o tu dirección Wallet USDT (TRC20, BEP20, ERC20) para recibir pagos globales."}
           </p>
         </div>
 
-        <PaymentMethodsManager banks={allBanks} existingMethods={userMethods} />
+        <PaymentMethodsManager
+          banks={allBanks}
+          existingMethods={userMethods}
+          isVenezuela={isVenezuela}
+        />
       </div>
     </div>
   </div>

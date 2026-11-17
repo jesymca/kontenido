@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Landmark, Smartphone, Coins, Plus, Trash2, Check, AlertCircle } from "lucide-react";
+import { Landmark, Smartphone, Coins, Plus, Trash2, AlertCircle, Wallet } from "lucide-react";
 import { savePaymentMethodAction, deletePaymentMethodAction } from "@/actions/creator";
+import { USDT_NETWORKS } from "@/lib/countries";
 
 interface Bank {
   id: number;
@@ -12,28 +13,42 @@ interface Bank {
 
 interface PaymentMethod {
   id: string;
-  type: "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE";
+  type: "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE" | "USDT_WALLET";
   bankId: number | null;
   accountNumber: string | null;
   accountHolder: string | null;
   idDocument: string | null;
   phone: string | null;
   binanceEmail: string | null;
+  usdtNetwork?: string | null;
   isActive: number;
 }
 
 interface Props {
   banks: Bank[];
   existingMethods: PaymentMethod[];
+  isVenezuela?: boolean;
 }
 
 /**
  * Gestor interactivo de métodos de pago para creadoras
+ * - Venezuela: PagoMóvil, Transferencia Bancaria Nacional, Binance USDT y Wallet USDT
+ * - Internacional: exclusivamente Binance Pay / USDT y Wallet USDT (sin Bolívares)
  */
-export default function PaymentMethodsManager({ banks, existingMethods }: Props) {
-  const [activeTab, setActiveTab] = useState<"BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE">("PAGOMOVIL");
+export default function PaymentMethodsManager({
+  banks,
+  existingMethods,
+  isVenezuela = true,
+}: Props) {
+  const [activeTab, setActiveTab] = useState<
+    "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE" | "USDT_WALLET"
+  >(isVenezuela ? "PAGOMOVIL" : "BINANCE");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const visibleMethods = isVenezuela
+    ? existingMethods
+    : existingMethods.filter((m) => m.type === "BINANCE" || m.type === "USDT_WALLET");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -51,7 +66,7 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
         return;
       }
       window.location.reload();
-    } catch (err) {
+    } catch {
       setError("Error al guardar método de pago.");
       setLoading(false);
     }
@@ -66,13 +81,13 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
   return (
     <div className="space-y-8">
       {/* 1. MÉTODOS YA CONFIGURADOS */}
-      {existingMethods.length > 0 && (
+      {visibleMethods.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            Tus métodos de cobro activos ({existingMethods.length}/3)
+            Tus métodos de cobro activos ({visibleMethods.length})
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {existingMethods.map((m) => {
+            {visibleMethods.map((m) => {
               const bankName = banks.find((b) => b.id === m.bankId)?.nombreBanco || "Banco Nacional";
               return (
                 <div
@@ -84,12 +99,14 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
                       {m.type === "BANK_TRANSFER" && <Landmark className="w-5 h-5" />}
                       {m.type === "PAGOMOVIL" && <Smartphone className="w-5 h-5" />}
                       {m.type === "BINANCE" && <Coins className="w-5 h-5" />}
+                      {m.type === "USDT_WALLET" && <Wallet className="w-5 h-5 text-emerald-400" />}
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
                         {m.type === "BANK_TRANSFER" && "Transferencia Bancaria"}
                         {m.type === "PAGOMOVIL" && "PagoMóvil"}
-                        {m.type === "BINANCE" && "Binance USDT"}
+                        {m.type === "BINANCE" && "Binance Pay / USDT"}
+                        {m.type === "USDT_WALLET" && `Wallet USDT (${m.usdtNetwork || "TRC20"})`}
                         <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-semibold">
                           Activo
                         </span>
@@ -99,7 +116,9 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
                         <div className="text-[11px] text-slate-400 mt-1 leading-snug">
                           <p className="text-slate-200 font-medium">{bankName}</p>
                           <p>Cuenta: {m.accountNumber}</p>
-                          <p>Titular: {m.accountHolder} ({m.idDocument})</p>
+                          <p>
+                            Titular: {m.accountHolder} ({m.idDocument})
+                          </p>
                         </div>
                       )}
 
@@ -111,9 +130,11 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
                         </div>
                       )}
 
-                      {m.type === "BINANCE" && (
+                      {(m.type === "BINANCE" || m.type === "USDT_WALLET") && (
                         <div className="text-[11px] text-slate-400 mt-1 leading-snug">
-                          <p className="text-slate-200 font-medium">{m.binanceEmail}</p>
+                          <p className="text-slate-200 font-medium font-mono break-all">
+                            {m.binanceEmail}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -136,41 +157,53 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
 
       {/* 2. FORMULARIO PARA AGREGAR NUEVO MÉTODO */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
-        <h3 className="text-base font-bold text-white mb-4">Agregar o modificar método</h3>
+        <h3 className="text-base font-bold text-white mb-4">
+          {isVenezuela
+            ? "Agregar método de cobro (Bolívares o USDT)"
+            : "Agregar método de cobro internacional (100% USDT)"}
+        </h3>
 
-        {/* Pestañas de los 3 métodos */}
-        <div className="grid grid-cols-3 gap-2 mb-6">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("PAGOMOVIL");
-              setError(null);
-            }}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-              activeTab === "PAGOMOVIL"
-                ? "bg-rose-600 text-white shadow-md shadow-rose-600/30"
-                : "bg-slate-800 text-slate-400 hover:text-white"
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            PagoMóvil
-          </button>
+        {/* Pestañas de métodos */}
+        <div
+          className={`grid gap-2 mb-6 ${
+            isVenezuela ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2"
+          }`}
+        >
+          {isVenezuela && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("PAGOMOVIL");
+                  setError(null);
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  activeTab === "PAGOMOVIL"
+                    ? "bg-rose-600 text-white shadow-md shadow-rose-600/30"
+                    : "bg-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                PagoMóvil
+              </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("BANK_TRANSFER");
-              setError(null);
-            }}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-              activeTab === "BANK_TRANSFER"
-                ? "bg-rose-600 text-white shadow-md shadow-rose-600/30"
-                : "bg-slate-800 text-slate-400 hover:text-white"
-            }`}
-          >
-            <Landmark className="w-3.5 h-3.5" />
-            Banco Nacional
-          </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("BANK_TRANSFER");
+                  setError(null);
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  activeTab === "BANK_TRANSFER"
+                    ? "bg-rose-600 text-white shadow-md shadow-rose-600/30"
+                    : "bg-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                <Landmark className="w-3.5 h-3.5" />
+                Banco Nacional
+              </button>
+            </>
+          )}
 
           <button
             type="button"
@@ -185,7 +218,23 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
             }`}
           >
             <Coins className="w-3.5 h-3.5" />
-            Binance USDT
+            Binance Pay / USDT
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("USDT_WALLET");
+              setError(null);
+            }}
+            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              activeTab === "USDT_WALLET"
+                ? "bg-rose-600 text-white shadow-md shadow-rose-600/30"
+                : "bg-slate-800 text-slate-400 hover:text-white"
+            }`}
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            Wallet USDT Directa
           </button>
         </div>
 
@@ -198,7 +247,7 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Formulario PagoMóvil */}
-          {activeTab === "PAGOMOVIL" && (
+          {isVenezuela && activeTab === "PAGOMOVIL" && (
             <>
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -248,7 +297,7 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
           )}
 
           {/* Formulario Transferencia Bancaria */}
-          {activeTab === "BANK_TRANSFER" && (
+          {isVenezuela && activeTab === "BANK_TRANSFER" && (
             <>
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -315,18 +364,56 @@ export default function PaymentMethodsManager({ banks, existingMethods }: Props)
           {activeTab === "BINANCE" && (
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Correo, Binance Pay ID o Wallet USDT
+                Correo o Binance Pay ID
               </label>
               <input
                 name="binanceEmail"
                 type="text"
                 required
-                placeholder="ej: tu_correo@binance.com o Pay ID"
+                placeholder="ej: tu_correo@binance.com o Pay ID (ej: 123456789)"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:border-rose-500 focus:outline-hidden"
               />
               <p className="text-[11px] text-slate-500 mt-1">
-                Se enviarán USDT por Binance Pay o red TRC20/BEP20 según disponibilidad.
+                Se enviarán USDT directamente a tu cuenta Binance sin conversión a moneda local.
               </p>
+            </div>
+          )}
+
+          {/* Formulario Wallet USDT Directa */}
+          {activeTab === "USDT_WALLET" && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Red Cripto (Blockchain)
+                </label>
+                <select
+                  name="usdtNetwork"
+                  required
+                  defaultValue="TRC20"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:border-rose-500 focus:outline-hidden"
+                >
+                  {USDT_NETWORKS.map((net) => (
+                    <option key={net.value} value={net.value}>
+                      {net.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Dirección de Billetera (Wallet Address USDT)
+                </label>
+                <input
+                  name="binanceEmail"
+                  type="text"
+                  required
+                  placeholder="ej: T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb o 0x..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white font-mono text-sm focus:border-rose-500 focus:outline-hidden"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Verifica que la dirección corresponda exactamente a la red seleccionada.
+                </p>
+              </div>
             </div>
           )}
 

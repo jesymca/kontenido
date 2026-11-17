@@ -64,9 +64,14 @@ export async function submitKycAction(formData: FormData) {
   const idNumber = (formData.get("idNumber") as string)?.trim();
   const fullName = (formData.get("fullName") as string)?.trim();
   const birthDate = formData.get("birthDate") as string;
+  const rawDocType = (formData.get("documentType") as string)?.trim().toUpperCase();
+  const documentType =
+    rawDocType === "PASSPORT" || rawDocType === "NATIONAL_ID" || rawDocType === "CEDULA_VE"
+      ? rawDocType
+      : "CEDULA_VE";
 
   if (!frontKey || !backKey || !selfieKey || !idNumber || !fullName || !birthDate) {
-    return { error: "Todos los campos y fotos de la cédula son obligatorios." };
+    return { error: "Todos los campos y fotografías del documento de identidad son obligatorios." };
   }
 
   // Validar mayoría de edad
@@ -86,7 +91,7 @@ export async function submitKycAction(formData: FormData) {
   await db.insert(kycDocuments).values({
     id: docId,
     userId,
-    documentType: "CEDULA_VE",
+    documentType,
     frontKey,
     backKey,
     selfieKey,
@@ -127,7 +132,7 @@ export async function signContractAction(formData: FormData) {
   const accepted = formData.get("accepted") === "on";
 
   if (!accepted || !fullName || !idDocument) {
-    return { error: "Debes aceptar los términos del contrato e ingresar tu nombre y cédula." };
+    return { error: "Debes aceptar los términos del contrato e ingresar tu nombre y documento de identidad." };
   }
 
   const reqHeaders = await headers();

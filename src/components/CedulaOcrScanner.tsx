@@ -25,8 +25,19 @@ declare global {
   }
 }
 
-export default function CedulaOcrScanner() {
+interface CedulaOcrScannerProps {
+  isVenezuela?: boolean;
+  countryName?: string;
+}
+
+export default function CedulaOcrScanner({
+  isVenezuela = true,
+  countryName = "Venezuela",
+}: CedulaOcrScannerProps) {
   const router = useRouter();
+  const [documentType, setDocumentType] = useState<"CEDULA_VE" | "NATIONAL_ID" | "PASSPORT">(
+    isVenezuela ? "CEDULA_VE" : "NATIONAL_ID"
+  );
 
   // Estados de archivos
   const [frontFile, setFrontFile] = useState<File | null>(null);
@@ -182,13 +193,13 @@ export default function CedulaOcrScanner() {
     setError(null);
 
     if (!frontFile || !backFile || !selfieFile) {
-      setError("Debes subir las 3 fotografías requeridas: Cédula Frente, Cédula Reverso y Selfie con Cédula.");
+      setError("Debes subir las 3 fotografías requeridas: Frente del Documento, Reverso y Selfie con Documento.");
       setSubmitting(false);
       return;
     }
 
     if (!idNumber.trim() || !fullName.trim() || !birthDate) {
-      setError("Por favor completa tu número de cédula, nombre completo y fecha de nacimiento.");
+      setError("Por favor completa el número de documento, nombre completo y fecha de nacimiento.");
       setSubmitting(false);
       return;
     }
@@ -216,6 +227,7 @@ export default function CedulaOcrScanner() {
       // 3. Registrar documento en la base de datos
       const formData = new FormData();
       formData.set("docId", urlsRes.docId);
+      formData.set("documentType", documentType);
       formData.set("frontKey", urlsRes.frontKey);
       formData.set("backKey", urlsRes.backKey);
       formData.set("selfieKey", urlsRes.selfieKey);
@@ -245,13 +257,13 @@ export default function CedulaOcrScanner() {
         <Lock className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
         <div className="text-xs text-slate-300 leading-relaxed">
           <strong className="text-white block font-semibold mb-0.5">
-            Documento estrictamente privado y confidencial
+            Documento estrictamente privado y confidencial ({countryName})
           </strong>
-          Tus fotos de la cédula y selfie se guardan en almacenamiento cifrado de alta seguridad.{" "}
+          Tus fotos de identidad y selfie se guardan en almacenamiento cifrado de alta seguridad.{" "}
           <span className="text-emerald-400 font-semibold">
             Nunca serán públicas ni visibles para tus suscriptores.
           </span>{" "}
-          Solo se utilizarán para validar que eres mayor de edad según las leyes venezolanas y activar tu perfil.
+          Solo se utilizarán para validar que eres mayor de edad (≥ 18 años) y activar tu perfil de creadora.
         </div>
       </div>
 
@@ -273,12 +285,56 @@ export default function CedulaOcrScanner() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* PASO 1: Subir Frente de la Cédula con OCR */}
+        {/* Tipo de documento */}
+        <div>
+          <label className="block text-xs font-bold text-white uppercase tracking-wider mb-2">
+            Tipo de Documento Oficial
+          </label>
+          <div className={`grid gap-2 ${isVenezuela ? "grid-cols-3" : "grid-cols-2"}`}>
+            {isVenezuela && (
+              <button
+                type="button"
+                onClick={() => setDocumentType("CEDULA_VE")}
+                className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                  documentType === "CEDULA_VE"
+                    ? "bg-rose-600 text-white border-rose-500"
+                    : "bg-slate-950 text-slate-300 border-slate-800"
+                }`}
+              >
+                Cédula Venezolana
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDocumentType("NATIONAL_ID")}
+              className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                documentType === "NATIONAL_ID"
+                  ? "bg-rose-600 text-white border-rose-500"
+                  : "bg-slate-950 text-slate-300 border-slate-800"
+              }`}
+            >
+              Documento / ID Nacional
+            </button>
+            <button
+              type="button"
+              onClick={() => setDocumentType("PASSPORT")}
+              className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                documentType === "PASSPORT"
+                  ? "bg-rose-600 text-white border-rose-500"
+                  : "bg-slate-950 text-slate-300 border-slate-800"
+              }`}
+            >
+              Pasaporte Internacional
+            </button>
+          </div>
+        </div>
+
+        {/* PASO 1: Subir Frente del documento con OCR */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
               <Scan className="w-4 h-4 text-rose-500" />
-              1. Cédula Frente (Con Escáner Inteligente)
+              1. {documentType === "PASSPORT" ? "Página Principal del Pasaporte" : documentType === "CEDULA_VE" ? "Cédula Frente (Con Escáner Inteligente)" : "Documento de Identidad Frente"}
             </label>
             {ocrLoading && (
               <span className="text-xs text-rose-400 animate-pulse flex items-center gap-1 font-semibold">
@@ -400,14 +456,18 @@ export default function CedulaOcrScanner() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Número de Cédula de Identidad
+                {documentType === "CEDULA_VE"
+                  ? "Número de Cédula de Identidad"
+                  : documentType === "PASSPORT"
+                  ? "Número de Pasaporte"
+                  : "Número de Documento Nacional"}
               </label>
               <input
                 type="text"
                 required
                 value={idNumber}
                 onChange={(e) => setIdNumber(e.target.value)}
-                placeholder="ej: V-18452921"
+                placeholder={documentType === "CEDULA_VE" ? "ej: V-18452921" : "ej: AB1234567"}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white font-mono text-sm focus:border-rose-500 focus:outline-hidden"
               />
             </div>

@@ -16,7 +16,9 @@ import {
   agencyCreators,
 } from "@/lib/db/schema";
 import { ensureChatSchema } from "@/lib/db/initChat";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { getCreatorCategoryMeta } from "@/lib/creatorCategories";
+import { getCountryMeta, isVenezuelanUser } from "@/lib/countries";
 import { eq, and, desc, gt } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
 import SubscribeButton from "@/components/SubscribeButton";
@@ -128,6 +130,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function PublicProfilePage({ params }: PageProps) {
   await ensureChatSchema();
+  await ensureKomestibleSchema();
   const { username } = await params;
   const decodedUsername = decodeURIComponent(username).toLowerCase().trim();
 
@@ -336,6 +339,9 @@ export default async function PublicProfilePage({ params }: PageProps) {
                   >
                     {categoryMeta.label}
                   </span>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-950 border border-slate-800 text-slate-300 font-semibold">
+                    {getCountryMeta(creator.country).flag} {getCountryMeta(creator.country).name}
+                  </span>
                   {activeAgency && (
                     <span
                       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${activeAgency.badgeColor} shadow-lg`}
@@ -434,7 +440,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
                 <Clock className="w-4 h-4" /> Verificación en Revisión
               </div>
             ) : (
-              <div className="flex items-center gap-1 text-amber-500 font-medium" title="Esta cuenta aún no ha validado su cédula de identidad">
+              <div className="flex items-center gap-1 text-amber-500 font-medium" title={isVenezuelanUser(creator.country) ? "Esta cuenta aún no ha validado su cédula de identidad" : "Esta cuenta aún no ha validado su documento oficial"}>
                 <AlertCircle className="w-4 h-4" /> Falta Verificar
               </div>
             )}

@@ -3,11 +3,34 @@
 import { db } from "@/lib/db";
 import { users, profiles, wallets, agencies } from "@/lib/db/schema";
 import { ensureChatSchema } from "@/lib/db/initChat";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
+
+const RESERVED_REGISTER_USERNAMES = new Set([
+  "admin",
+  "panel",
+  "cuenta",
+  "login",
+  "registro",
+  "agencia",
+  "suspendido",
+  "api",
+  "img",
+  "mensajes",
+  "settings",
+  "soporte",
+  "kontenido",
+  "root",
+  "support",
+  "komestible",
+  "koinciden",
+]);
+
+const validGenderEnum = z.enum(["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"]);
 
 /**
  * Esquema de validación para registro de CREADOR
@@ -21,6 +44,8 @@ const registerCreatorSchema = z.object({
     .regex(/^[a-z0-9_]+$/, "Solo letras minúsculas, números y guiones bajos"),
   email: z.string().email("Ingresa un correo electrónico válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  country: z.string().min(2).max(10).default("VE"),
+  gender: validGenderEnum.default("MUJER"),
   birthDate: z.string().refine((val) => {
     const birth = new Date(val);
     const today = new Date();
@@ -42,6 +67,8 @@ const registerConsumerSchema = z.object({
     .regex(/^[a-z0-9_]+$/, "Solo letras minúsculas, números y guiones bajos"),
   email: z.string().email("Ingresa un correo electrónico válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  country: z.string().min(2).max(10).default("VE"),
+  gender: validGenderEnum.default("HOMBRE"),
   birthDate: z.string().optional(),
 });
 
@@ -49,10 +76,15 @@ const registerConsumerSchema = z.object({
  * Registrar una nueva cuenta de CREADOR
  */
 export async function registerCreatorAction(formData: FormData) {
+  await ensureChatSchema();
+  await ensureKomestibleSchema();
+
   const raw = {
     username: (formData.get("username") as string)?.toLowerCase().trim(),
     email: (formData.get("email") as string)?.toLowerCase().trim(),
     password: formData.get("password") as string,
+    country: ((formData.get("country") as string) || "VE").toUpperCase().trim(),
+    gender: ((formData.get("gender") as string) || "MUJER").toUpperCase().trim(),
     birthDate: formData.get("birthDate") as string,
   };
 
@@ -61,7 +93,11 @@ export async function registerCreatorAction(formData: FormData) {
     return { error: validated.error.errors[0]?.message || "Datos inválidos" };
   }
 
-  const { username, email, password, birthDate } = validated.data;
+  const { username, email, password, country, gender, birthDate } = validated.data;
+
+  if (RESERVED_REGISTER_USERNAMES.has(username)) {
+    return { error: "Este nombre de usuario está reservado por la plataforma." };
+  }
 
   // Verificar si ya existe usuario o correo
   const existing = await db.query.users.findFirst({
@@ -87,17 +123,24 @@ export async function registerCreatorAction(formData: FormData) {
     status: "PENDING",
     kycStatus: "NONE",
     birthDate,
+    country,
+    gender,
     level: 0,
     allowDownload: 0,
     createdAt: now,
     updatedAt: now,
   });
 
+  const creatorCat = ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"].includes(gender)
+    ? (gender as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
+    : "MUJER";
+
   await db.insert(profiles).values({
     userId,
     displayName: username,
     bio: "Creadora de contenido en KONTENIDO.",
     subscriptionPriceKoin: 10.0,
+    creatorCategory: creatorCat,
     isPublished: 0,
     createdAt: now,
     updatedAt: now,
@@ -118,10 +161,15 @@ export async function registerCreatorAction(formData: FormData) {
  * Registrar una nueva cuenta de CONSUMIDOR
  */
 export async function registerConsumerAction(formData: FormData) {
+  await ensureChatSchema();
+  await ensureKomestibleSchema();
+
   const raw = {
     username: (formData.get("username") as string)?.toLowerCase().trim(),
     email: (formData.get("email") as string)?.toLowerCase().trim(),
     password: formData.get("password") as string,
+    country: ((formData.get("country") as string) || "VE").toUpperCase().trim(),
+    gender: ((formData.get("gender") as string) || "HOMBRE").toUpperCase().trim(),
     birthDate: (formData.get("birthDate") as string) || undefined,
   };
 
@@ -130,7 +178,11 @@ export async function registerConsumerAction(formData: FormData) {
     return { error: validated.error.errors[0]?.message || "Datos inválidos" };
   }
 
-  const { username, email, password, birthDate } = validated.data;
+  const { username, email, password, country, gender, birthDate } = validated.data;
+
+  if (RESERVED_REGISTER_USERNAMES.has(username)) {
+    return { error: "Este nombre de usuario está reservado por la plataforma." };
+  }
 
   const existing = await db.query.users.findFirst({
     where: or(eq(users.username, username), eq(users.email, email)),
@@ -155,6 +207,8 @@ export async function registerConsumerAction(formData: FormData) {
     status: "ACTIVE",
     kycStatus: "NONE",
     birthDate: birthDate || null,
+    country,
+    gender,
     level: 0,
     allowDownload: 0,
     createdAt: now,
@@ -164,7 +218,7 @@ export async function registerConsumerAction(formData: FormData) {
   await db.insert(profiles).values({
     userId,
     displayName: username,
-    bio: "Usuario consumidor en KONTENIDO.",
+    bio: "Usuario en KONTENIDO.",
     subscriptionPriceKoin: 0.0,
     isPublished: 0,
     createdAt: now,
@@ -194,6 +248,7 @@ const registerAgencySchema = z.object({
     .regex(/^[a-z0-9_]+$/, "Solo letras minúsculas, números y guiones bajos"),
   email: z.string().email("Ingresa un correo electrónico válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  country: z.string().min(2).max(10).default("VE"),
   description: z.string().max(300).optional(),
 });
 
@@ -202,12 +257,14 @@ const registerAgencySchema = z.object({
  */
 export async function registerAgencyAction(formData: FormData) {
   await ensureChatSchema();
+  await ensureKomestibleSchema();
 
   const raw = {
     agencyName: (formData.get("agencyName") as string)?.trim(),
     username: (formData.get("username") as string)?.toLowerCase().trim(),
     email: (formData.get("email") as string)?.toLowerCase().trim(),
     password: formData.get("password") as string,
+    country: ((formData.get("country") as string) || "VE").toUpperCase().trim(),
     description: (formData.get("description") as string)?.trim(),
   };
 
@@ -216,7 +273,11 @@ export async function registerAgencyAction(formData: FormData) {
     return { error: validated.error.errors[0]?.message || "Datos inválidos" };
   }
 
-  const { agencyName, username, email, password, description } = validated.data;
+  const { agencyName, username, email, password, country, description } = validated.data;
+
+  if (RESERVED_REGISTER_USERNAMES.has(username)) {
+    return { error: "Este nombre de usuario está reservado por la plataforma." };
+  }
 
   const existing = await db.query.users.findFirst({
     where: or(eq(users.username, username), eq(users.email, email)),
@@ -240,6 +301,7 @@ export async function registerAgencyAction(formData: FormData) {
     role: "AGENCY",
     status: "ACTIVE",
     kycStatus: "NONE",
+    country,
     level: 0,
     allowDownload: 0,
     createdAt: now,

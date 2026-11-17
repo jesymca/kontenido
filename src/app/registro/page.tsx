@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Sparkles, Eye, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2, Building2 } from "lucide-react";
+import { Sparkles, Eye, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2, Building2, Globe, UserCheck } from "lucide-react";
 import {
   registerCreatorAction,
   registerConsumerAction,
@@ -13,20 +13,35 @@ import {
 import { signIn } from "next-auth/react";
 import PasswordInput from "@/components/PasswordInput";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
+import { COUNTRIES, USER_GENDERS, isVenezuelanUser } from "@/lib/countries";
 
 /**
  * Pantalla de registro de KONTENIDO
  * Diseñada de acuerdo con 03_ROLES_Y_FLUJOS.md:
- * - Selección intuitiva con DOS tarjetas grandes: Creador vs Consumidor
+ * - Selección intuitiva con tarjetas grandes: Consumidor vs Creador vs Agencia
+ * - Selección de País (Venezuela o Internacional -> USDT directo) y Género
  * - Integración de Google OAuth
- * - Comentarios en español
  */
 export default function RegistroPage() {
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<"CREATOR" | "CONSUMER" | "AGENCY">("CONSUMER");
+  const [selectedCountry, setSelectedCountry] = useState<string>("VE");
+  const [selectedGender, setSelectedGender] = useState<string>("HOMBRE");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const isVzla = isVenezuelanUser(selectedCountry);
+
+  const handleRoleChange = (role: "CREATOR" | "CONSUMER" | "AGENCY") => {
+    setSelectedRole(role);
+    setError(null);
+    if (role === "CREATOR" && selectedGender === "HOMBRE") {
+      setSelectedGender("MUJER");
+    } else if (role === "CONSUMER" && selectedGender === "MUJER") {
+      // Mantiene selección del usuario sin forzar, o permite elegir libremente
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,6 +50,8 @@ export default function RegistroPage() {
     setSuccess(null);
 
     const formData = new FormData(e.currentTarget);
+    formData.set("country", selectedCountry);
+    formData.set("gender", selectedGender);
 
     try {
       const res =
@@ -109,10 +126,7 @@ export default function RegistroPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           <button
             type="button"
-            onClick={() => {
-              setSelectedRole("CONSUMER");
-              setError(null);
-            }}
+            onClick={() => handleRoleChange("CONSUMER")}
             className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
               selectedRole === "CONSUMER"
                 ? "bg-slate-800 border-rose-500 shadow-lg shadow-rose-500/10 ring-2 ring-rose-500/40"
@@ -124,16 +138,13 @@ export default function RegistroPage() {
             </div>
             <h3 className="text-sm font-bold text-white">Quiero ver contenido</h3>
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              Explora fotos y videos, suscríbete y sube de nivel con KOIN.
+              Explora perfiles, accede gratis a KOMESTIBLE y sube de nivel con KOIN.
             </p>
           </button>
 
           <button
             type="button"
-            onClick={() => {
-              setSelectedRole("CREATOR");
-              setError(null);
-            }}
+            onClick={() => handleRoleChange("CREATOR")}
             className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
               selectedRole === "CREATOR"
                 ? "bg-slate-800 border-rose-500 shadow-lg shadow-rose-500/10 ring-2 ring-rose-500/40"
@@ -145,16 +156,15 @@ export default function RegistroPage() {
             </div>
             <h3 className="text-sm font-bold text-white">Quiero crear contenido</h3>
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              Monetiza en 1 clic y recibe pagos semanales en Bs. o Binance.
+              {isVzla
+                ? "Monetiza en 1 clic y recibe pagos semanales en Bs. o Binance."
+                : "Monetiza en 1 clic y cobra internacionalmente directo en USDT."}
             </p>
           </button>
 
           <button
             type="button"
-            onClick={() => {
-              setSelectedRole("AGENCY");
-              setError(null);
-            }}
+            onClick={() => handleRoleChange("AGENCY")}
             className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
               selectedRole === "AGENCY"
                 ? "bg-slate-800 border-indigo-500 shadow-lg shadow-indigo-500/10 ring-2 ring-indigo-500/40"
@@ -171,11 +181,74 @@ export default function RegistroPage() {
           </button>
         </div>
 
+        {/* Selector de País y Género previo (aplica a Google OAuth y registro tradicional) */}
+        <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-4 mb-6">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-rose-400" />
+              País de residencia
+            </label>
+            <select
+              name="countrySelector"
+              value={selectedCountry}
+              onChange={(e) => setSelectedCountry(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:outline-hidden focus:border-rose-500 transition"
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.flag} {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] mt-1.5 leading-snug text-slate-400">
+              {isVzla ? (
+                <span>
+                  🇻🇪 <strong className="text-emerald-400">Ecosistema Venezuela:</strong> Podrás cobrar en Bolívares (PagoMóvil / 30 Bancos Nacionales) o Binance USDT.
+                </span>
+              ) : (
+                <span>
+                  🌐 <strong className="text-amber-400">Modo Internacional (USDT):</strong> Todos tus pagos, recargas y retiros funcionarán 100% directo en <strong>USDT</strong> sin conversión a Bolívares.
+                </span>
+              )}
+            </p>
+          </div>
+
+          {selectedRole !== "AGENCY" && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+                Soy / Me registro como
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {USER_GENDERS.map((g) => (
+                  <button
+                    key={g.value}
+                    type="button"
+                    onClick={() => setSelectedGender(g.value)}
+                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition ${
+                      selectedGender === g.value
+                        ? "bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/20"
+                        : "bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700"
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1.5">
+                Usado para tu perfil público y la sección gratuita de encuentros y valoración <strong>KOMESTIBLE</strong>.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* 2. Botón de inicio rápido con Google */}
         <button
           type="button"
           onClick={() => {
             document.cookie = `intended_role=${selectedRole}; path=/; max-age=300; SameSite=Lax`;
+            document.cookie = `intended_country=${selectedCountry}; path=/; max-age=300; SameSite=Lax`;
+            document.cookie = `intended_gender=${selectedGender}; path=/; max-age=300; SameSite=Lax`;
             signIn("google", { callbackUrl: selectedRole === "CREATOR" ? "/panel" : "/cuenta" });
           }}
           className="w-full flex items-center justify-center gap-3 bg-white text-slate-900 hover:bg-slate-100 font-semibold py-3 px-4 rounded-xl transition text-sm mb-6 shadow-sm cursor-pointer"
@@ -288,7 +361,9 @@ export default function RegistroPage() {
               />
               <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                Validación de cédula requerida antes de publicar contenido.
+                {isVzla
+                  ? "Validación de cédula requerida antes de publicar contenido."
+                  : "Validación de documento de identidad o pasaporte requerida antes de publicar contenido."}
               </p>
             </div>
           ) : (

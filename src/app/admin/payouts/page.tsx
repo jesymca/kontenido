@@ -2,12 +2,14 @@ import { db } from "@/lib/db";
 import { payouts, users, paymentMethods, banks } from "@/lib/db/schema";
 import { desc, eq } from "drizzle-orm";
 import AdminPayoutsList from "@/components/AdminPayoutsList";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { DollarSign } from "lucide-react";
 
 /**
  * Vista de Cortes Semanales y Liquidaciones a Creadoras (/admin/payouts)
  */
 export default async function AdminPayoutsPage() {
+  await ensureKomestibleSchema();
   const allPayouts = await db.query.payouts.findMany({
     orderBy: [desc(payouts.createdAt)],
     with: {
@@ -35,7 +37,7 @@ export default async function AdminPayoutsPage() {
           Cortes Semanales y Liquidaciones
         </h1>
         <p className="text-slate-400 text-xs sm:text-sm mt-1">
-          Gestiona los pagos netos a creadoras mediante Banco de Venezuela, PagoMóvil o Binance USDT y adjunta comprobantes.
+          Gestiona los pagos netos a creadoras venezolanas (Banco, PagoMóvil, Binance) e internacionales (directo en USDT) y adjunta referencias.
         </p>
       </div>
 

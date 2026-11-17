@@ -5,6 +5,7 @@ import Google from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
 import { users, profiles, wallets } from "@/lib/db/schema";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -32,6 +33,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Contraseña", type: "password" },
       },
       async authorize(rawCredentials) {
+        await ensureKomestibleSchema();
         const parsed = loginSchema.safeParse(rawCredentials);
         if (!parsed.success) {
           return null;
@@ -68,6 +70,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           vipMembershipId: user.vipMembershipId,
           allowDownload: user.allowDownload,
           suspensionReason: user.suspensionReason,
+          country: user.country || "VE",
+          gender: user.gender || null,
         };
       },
     }),
@@ -88,6 +92,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     // Manejo de registro automático al iniciar con Google
     async signIn({ user, account }) {
+      await ensureKomestibleSchema();
       if (account?.provider === "google" && user.email) {
         const email = user.email.toLowerCase().trim();
         const existing = await db.query.users.findFirst({
@@ -96,6 +101,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const cookieStore = await cookies();
         const intendedRoleCookie = cookieStore.get("intended_role")?.value;
+        const intendedCountryCookie = cookieStore.get("intended_country")?.value;
+        const intendedGenderCookie = cookieStore.get("intended_gender")?.value;
         const callbackUrlCookie =
           cookieStore.get("__Secure-authjs.callback-url")?.value ||
           cookieStore.get("authjs.callback-url")?.value ||
@@ -106,6 +113,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const wantsCreator =
           intendedRoleCookie === "CREATOR" || callbackUrlCookie.includes("/panel");
         const assignedRole = wantsCreator ? "CREATOR" : "CONSUMER";
+        const assignedCountry =
+          intendedCountryCookie && /^[A-Z]{2,5}$/i.test(intendedCountryCookie)
+            ? intendedCountryCookie.toUpperCase()
+            : "VE";
+        const validGenders = ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"];
+        const assignedGender =
+          intendedGenderCookie && validGenders.includes(intendedGenderCookie.toUpperCase())
+            ? (intendedGenderCookie.toUpperCase() as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL" | "OTRO")
+            : null;
 
         const now = new Date().toISOString();
 
@@ -129,15 +145,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             level: 0,
             allowDownload: 0,
             image: user.image || null,
+            country: assignedCountry,
+            gender: assignedGender,
             createdAt: now,
             updatedAt: now,
           });
+
+          const creatorCat =
+            assignedGender && ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"].includes(assignedGender)
+              ? (assignedGender as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
+              : "MUJER";
 
           await db.insert(profiles).values({
             userId: newUserId,
             displayName: user.name || generatedUsername,
             bio: assignedRole === "CREATOR" ? "Creadora de contenido en KONTENIDO." : "¡Hola! Estoy usando KONTENIDO.",
             subscriptionPriceKoin: assignedRole === "CREATOR" ? 10.0 : 0.0,
+            creatorCategory: creatorCat,
             isPublished: 0,
             createdAt: now,
             updatedAt: now,
@@ -158,6 +182,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.kycStatus = "NONE";
           user.level = 0;
           user.allowDownload = 0;
+          user.country = assignedCountry;
+          user.gender = assignedGender;
         } else {
           // Si ya existía como CONSUMER pero eligió registrarse como CREATOR, actualizar rol a CREATOR
           let currentRole = existing.role;
@@ -178,6 +204,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.vipMembershipId = existing.vipMembershipId;
           user.allowDownload = existing.allowDownload;
           user.suspensionReason = existing.suspensionReason;
+          user.country = existing.country || "VE";
+          user.gender = existing.gender || null;
         }
       }
       return true;
@@ -195,6 +223,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.vipMembershipId = user.vipMembershipId;
         token.allowDownload = user.allowDownload;
         token.suspensionReason = user.suspensionReason;
+        token.country = user.country;
+        token.gender = user.gender;
       }
 
       if (trigger === "update" && session) {
@@ -204,10 +234,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.level = session.level ?? token.level;
         token.vipMembershipId = session.vipMembershipId ?? token.vipMembershipId;
         token.allowDownload = session.allowDownload ?? token.allowDownload;
+        token.country = session.country ?? token.country;
+        token.gender = session.gender ?? token.gender;
       }
 
       // Consultar datos frescos del usuario desde Turso DB por email o id para mantener rol y KYC al día
       try {
+        await ensureKomestibleSchema();
         const emailLookup = typeof token.email === "string" ? token.email.toLowerCase().trim() : null;
         const idLookup = typeof token.id === "string" ? token.id : null;
 
@@ -233,6 +266,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.vipMembershipId = dbUser.vipMembershipId;
           token.allowDownload = dbUser.allowDownload;
           token.suspensionReason = dbUser.suspensionReason;
+          token.country = dbUser.country || "VE";
+          token.gender = dbUser.gender || null;
         }
       } catch (err) {
         console.error("Error sincronizando sesión con Turso DB en jwt callback:", err);
@@ -253,6 +288,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.vipMembershipId = token.vipMembershipId as string | null;
         session.user.allowDownload = (token.allowDownload as number) || 0;
         session.user.suspensionReason = token.suspensionReason as string | null;
+        session.user.country = (token.country as string) || "VE";
+        session.user.gender = (token.gender as string | null) ?? null;
       }
       return session;
     },

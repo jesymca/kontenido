@@ -30,11 +30,13 @@ import {
 import DeletePostButton from "@/components/DeletePostButton";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
 import SocialPostComposer from "@/components/SocialPostComposer";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { isVenezuelanUser, getCountryMeta } from "@/lib/countries";
 import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Estudio de Creadora | KONTENIDO",
-  description: "Panel de administración y publicaciones para creadoras de contenido en Venezuela.",
+  description: "Panel de administración y publicaciones para creadoras de contenido.",
 };
 
 /**
@@ -42,6 +44,7 @@ export const metadata = {
  * Permite gestionar contenido, revisar estadísticas de suscripción, saldo KOIN y checklist OnlyFans.
  */
 export default async function PanelPage() {
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user) {
     redirect("/login?callbackUrl=/panel");
@@ -87,6 +90,9 @@ export default async function PanelPage() {
     and(eq(messages.receiverId, userId), eq(messages.isRead, 0))
   );
 
+  const isVenezuela = isVenezuelanUser(user?.country);
+  const countryMeta = getCountryMeta(user?.country);
+
   // 2. Checklist de configuración estilo OnlyFans
   const checklist = [
     {
@@ -108,15 +114,19 @@ export default async function PanelPage() {
       href: "/panel/perfil",
     },
     {
-      title: "Validación de Cédula (KYC)",
-      desc: "Verificación de mayoría de edad con cédula venezolana",
+      title: isVenezuela ? "Validación de Cédula (KYC)" : "Validación de Identidad (KYC)",
+      desc: isVenezuela
+        ? "Verificación de mayoría de edad con cédula venezolana"
+        : "Verificación de mayoría de edad con ID Nacional o Pasaporte",
       completed: user?.kycStatus === "APPROVED",
       inReview: user?.kycStatus === "PENDING",
       href: "/panel/kyc",
     },
     {
-      title: "Método de Cobro (Venezuela)",
-      desc: "Configura tu PagoMóvil, Transferencia bancaria o Binance",
+      title: isVenezuela ? "Método de Cobro (Venezuela / USDT)" : "Método de Cobro (USDT)",
+      desc: isVenezuela
+        ? "Configura tu PagoMóvil, Transferencia bancaria o Binance/USDT"
+        : "Configura tu Binance Pay o Wallet USDT para cobrar internacionalmente",
       completed: !!paymentMethod,
       href: "/panel/pagos",
     },
@@ -160,8 +170,10 @@ export default async function PanelPage() {
               </div>
               <p className="text-amber-200/80 text-xs mt-1 leading-relaxed">
                 {user?.kycStatus === "PENDING"
-                  ? "Revisamos los datos extraídos de tu cédula y la selfie con documento para garantizar la seguridad de la comunidad."
-                  : "Sube tu cédula de identidad venezolana para activar tu insignia de Verificada y habilitar retiros bancarios."}
+                  ? "Revisamos los datos extraídos de tu documento y la selfie para garantizar la seguridad de la comunidad."
+                  : isVenezuela
+                  ? "Sube tu cédula de identidad venezolana para activar tu insignia de Verificada y habilitar retiros."
+                  : "Sube tu documento de identidad oficial o pasaporte para activar tu insignia de Verificada y habilitar retiros en USDT."}
               </p>
             </div>
           </div>
@@ -169,7 +181,7 @@ export default async function PanelPage() {
             href="/panel/kyc"
             className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shrink-0 shadow-lg shadow-amber-500/20 flex items-center gap-1.5"
           >
-            {user?.kycStatus === "PENDING" ? "Ver Estado KYC" : "Escanear Cédula"}
+            {user?.kycStatus === "PENDING" ? "Ver Estado KYC" : isVenezuela ? "Escanear Cédula" : "Verificar Identidad"}
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -178,12 +190,17 @@ export default async function PanelPage() {
       {/* Cabecera del Estudio */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2 flex-wrap">
             <Sparkles className="w-7 h-7 text-rose-500" />
             Estudio de Creadora
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-slate-300">
+              {countryMeta.flag} {countryMeta.name}
+            </span>
           </h1>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
-            Administra tus fotos, videos, suscripciones en KOIN y retiros directos en Bolívares.
+            {isVenezuela
+              ? "Administra tus fotos, videos, suscripciones en KOIN y retiros directos en Bolívares o USDT."
+              : "Administra tus fotos, videos, suscripciones en KOIN y retiros internacionales en USDT."}
           </p>
         </div>
 
@@ -225,7 +242,9 @@ export default async function PanelPage() {
             <span className="text-sm font-bold text-amber-500/80">KOIN</span>
           </div>
           <span className="text-[11px] text-slate-500 mt-2 block">
-            ≈ ${(wallet?.balanceKoin || 0).toFixed(2)} USDT liquidables en Bs.
+            {isVenezuela
+              ? `≈ $${(wallet?.balanceKoin || 0).toFixed(2)} USDT liquidables en Bs. o USDT`
+              : `≈ $${(wallet?.balanceKoin || 0).toFixed(2)} USDT liquidables 1:1`}
           </span>
         </div>
 

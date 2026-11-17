@@ -26,6 +26,8 @@ export const authConfig = {
         token.vipMembershipId = user.vipMembershipId;
         token.allowDownload = user.allowDownload;
         token.suspensionReason = user.suspensionReason;
+        token.country = user.country;
+        token.gender = user.gender;
       }
 
       if (trigger === "update" && session) {
@@ -35,6 +37,8 @@ export const authConfig = {
         token.level = session.level ?? token.level;
         token.vipMembershipId = session.vipMembershipId ?? token.vipMembershipId;
         token.allowDownload = session.allowDownload ?? token.allowDownload;
+        token.country = session.country ?? token.country;
+        token.gender = session.gender ?? token.gender;
       }
 
       return token;
@@ -52,6 +56,8 @@ export const authConfig = {
         session.user.vipMembershipId = token.vipMembershipId as string | null;
         session.user.allowDownload = (token.allowDownload as number) || 0;
         session.user.suspensionReason = token.suspensionReason as string | null;
+        session.user.country = (token.country as string) || "VE";
+        session.user.gender = (token.gender as string | null) ?? null;
       }
       return session;
     },

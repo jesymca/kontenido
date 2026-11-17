@@ -33,13 +33,14 @@ interface BankItem {
 interface PaymentMethodItem {
   id: string;
   creatorId: string;
-  type: "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE";
+  type: "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE" | "USDT_WALLET";
   accountHolder?: string | null;
   idDocument?: string | null;
   accountNumber?: string | null;
   accountType?: string | null;
   phone?: string | null;
   binanceEmail?: string | null;
+  usdtNetwork?: string | null;
   bank?: {
     nombreBanco: string;
     codigo?: string | null;
@@ -108,14 +109,13 @@ interface Props {
   paymentMethods: PaymentMethodItem[];
   payouts: PayoutItem[];
   subscribers: SubscriberItem[];
+  isVenezuela?: boolean;
+  countryLabel?: string;
 }
 
 /**
- * Hub Integral de Retiros en Bolívares (VES), Suscriptores y Liquidaciones para Creadoras
- * - Muestra tasa paralelo de DolarAPI en tiempo real
- * - Descuenta comisión según el status / volumen general (10%, 15%, 20%)
- * - Registra la solicitud en estado "EN ESPERA" hasta que SUPER_ADMIN confirme con Nro. de Transferencia
- * - Muestra la lista completa de suscriptores y pagos en KOIN
+ * Hub Integral de Retiros (Bolívares VES para Venezuela / USDT directo para Internacional),
+ * Suscriptores y Liquidaciones para Creadoras
  */
 export default function CreatorWithdrawalHub({
   balanceKoin,
@@ -127,15 +127,24 @@ export default function CreatorWithdrawalHub({
   paymentMethods,
   payouts,
   subscribers,
+  isVenezuela = true,
+  countryLabel = "🇻🇪 Venezuela",
 }: Props) {
+  const usableMethods = isVenezuela
+    ? paymentMethods
+    : paymentMethods.filter((m) => m.type === "BINANCE" || m.type === "USDT_WALLET");
+
   const [activeTab, setActiveTab] = useState<"withdraw" | "history" | "subscribers">("withdraw");
   const [withdrawAmount, setWithdrawAmount] = useState<string>("20");
   const [selectedMethodId, setSelectedMethodId] = useState<string>(
-    paymentMethods.length > 0 ? paymentMethods[0].id : ""
+    usableMethods.length > 0 ? usableMethods[0].id : ""
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const selectedMethod = usableMethods.find((m) => m.id === selectedMethodId);
+  const showBolivares = isVenezuela && selectedMethod?.type !== "USDT_WALLET";
 
   const numericAmount = parseFloat(withdrawAmount) || 0;
   const calculatedFee = Number(((numericAmount * tierInfo.feePct) / 100).toFixed(2));
@@ -158,7 +167,11 @@ export default function CreatorWithdrawalHub({
     }
 
     if (!selectedMethodId) {
-      setError("Debes agregar y seleccionar una cuenta bancaria o PagoMóvil para recibir los Bolívares.");
+      setError(
+        isVenezuela
+          ? "Debes agregar y seleccionar un método de cobro configurado."
+          : "Debes agregar y seleccionar una cuenta Binance o Wallet USDT para recibir tus fondos."
+      );
       return;
     }
 
@@ -200,29 +213,57 @@ export default function CreatorWithdrawalHub({
               {balanceKoin.toFixed(2)} <span className="text-sm font-bold text-amber-500/80">KOIN</span>
             </div>
             <span className="text-[11px] text-slate-500 mt-1 block">
-              Equivalente: <strong>{formatBs(balanceKoin * tasaParalelo)}</strong>
+              {isVenezuela ? (
+                <>
+                  Equivalente: <strong>{formatBs(balanceKoin * tasaParalelo)}</strong>
+                </>
+              ) : (
+                <>
+                  Equivalente directo: <strong className="text-emerald-400">${balanceKoin.toFixed(2)} USDT</strong>
+                </>
+              )}
             </span>
           </div>
         </div>
 
-        {/* Tasa Dólar Paralelo en Tiempo Real */}
-        <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-3xl p-5 shadow-xl flex flex-col justify-between relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-              Tasa Valor Paralelo
-            </span>
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-black text-white font-mono">
-              Bs. {tasaParalelo.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        {/* Tasa Dólar Paralelo (Venezuela) o Paridad Directa USDT (Internacional) */}
+        {isVenezuela ? (
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-3xl p-5 shadow-xl flex flex-col justify-between relative overflow-hidden">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+              <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                Tasa Valor Paralelo
+              </span>
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
             </div>
-            <span className="text-[10px] text-slate-400 mt-1 block truncate">
-              {fuenteTasa} • Actualizado hoy
-            </span>
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-white font-mono">
+                Bs. {tasaParalelo.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <span className="text-[10px] text-slate-400 mt-1 block truncate">
+                {fuenteTasa} • Actualizado hoy
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-3xl p-5 shadow-xl flex flex-col justify-between relative overflow-hidden">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+              <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                Ecosistema Internacional
+              </span>
+              <Coins className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-white font-mono">
+                1 KOIN = 1 USDT
+              </div>
+              <span className="text-[10px] text-slate-400 mt-1 block truncate">
+                {countryLabel} • Retiro 100% directo en USDT
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Estatus / Nivel de Comisión de la Creadora */}
         <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-rose-500/30 rounded-3xl p-5 shadow-xl flex flex-col justify-between">
@@ -325,7 +366,7 @@ export default function CreatorWithdrawalHub({
           }`}
         >
           <ArrowDownToLine className="w-4 h-4" />
-          Solicitar Retiro en Bolívares
+          {isVenezuela ? "Solicitar Retiro (Bs. / USDT)" : "Solicitar Retiro en USDT"}
         </button>
 
         <button
@@ -364,10 +405,14 @@ export default function CreatorWithdrawalHub({
           <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl">
             <h2 className="text-base font-bold text-white mb-1 flex items-center gap-2">
               <ArrowDownToLine className="w-5 h-5 text-rose-500" />
-              Calculadora de Retiro en Bolívares (VES)
+              {showBolivares
+                ? "Calculadora de Retiro en Bolívares (VES)"
+                : "Calculadora de Retiro Directo en USDT"}
             </h2>
             <p className="text-xs text-slate-400 mb-6">
-              Ingresa el monto en KOIN que deseas retirar. El sistema aplicará tu descuento de comisión del {tierInfo.feePct}% y calculará automáticamente los Bolívares que llegarán a tu cuenta bancaria según el valor paralelo.
+              {showBolivares
+                ? `Ingresa el monto en KOIN que deseas retirar. El sistema aplicará tu descuento de comisión del ${tierInfo.feePct}% y calculará automáticamente los Bolívares que llegarán a tu cuenta bancaria según el valor paralelo.`
+                : `Ingresa el monto en KOIN que deseas retirar. El sistema aplicará tu descuento de comisión del ${tierInfo.feePct}% y liquidará el monto neto directamente en USDT (1 KOIN = 1 USDT).`}
             </p>
 
             {error && (
@@ -419,20 +464,21 @@ export default function CreatorWithdrawalHub({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Cuenta de Destino en Venezuela
+                  {isVenezuela ? "Cuenta de Destino (Venezuela / Cripto)" : "Cuenta de Destino en USDT"}
                 </label>
-                {paymentMethods.length > 0 ? (
+                {usableMethods.length > 0 ? (
                   <div className="space-y-1.5">
                     <select
                       value={selectedMethodId}
                       onChange={(e) => setSelectedMethodId(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-xs text-white focus:border-rose-500 focus:outline-hidden"
                     >
-                      {paymentMethods.map((m) => (
+                      {usableMethods.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.type === "BANK_TRANSFER" && `Transferencia: ${m.bank?.nombreBanco || "Banco"} — ${m.accountNumber}`}
                           {m.type === "PAGOMOVIL" && `PagoMóvil: ${m.bank?.nombreBanco || "Banco"} — Tel: ${m.phone} (${m.idDocument || ""})`}
-                          {m.type === "BINANCE" && `Binance USDT: ${m.binanceEmail}`}
+                          {m.type === "BINANCE" && `Binance Pay / USDT: ${m.binanceEmail}`}
+                          {m.type === "USDT_WALLET" && `Wallet USDT (${m.usdtNetwork || "TRC20"}): ${m.binanceEmail}`}
                         </option>
                       ))}
                     </select>
@@ -446,21 +492,25 @@ export default function CreatorWithdrawalHub({
                 ) : (
                   <div className="p-3.5 bg-amber-950/40 border border-amber-500/40 rounded-2xl text-xs text-amber-300 space-y-2">
                     <p>
-                      Aún no tienes cuentas configuradas. Ve a la sección inferior de{" "}
+                      Aún no tienes métodos de cobro configurados. Ve a la sección inferior de{" "}
                       <a
                         href="#metodos-de-cobro"
                         className="font-bold text-amber-200 underline hover:text-white transition"
                       >
                         Métodos de Cobro
                       </a>{" "}
-                      para agregar tu cuenta bancaria o PagoMóvil.
+                      {isVenezuela
+                        ? "para agregar tu cuenta bancaria, PagoMóvil o Binance USDT."
+                        : "para agregar tu Binance Pay ID o Wallet USDT."}
                     </p>
                     <a
                       href="#metodos-de-cobro"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold text-[11px] border border-amber-500/40 transition"
                     >
                       <Landmark className="w-3.5 h-3.5" />
-                      Ir a Configuración de Métodos de Cobro (Venezuela y Cripto) ↓
+                      {isVenezuela
+                        ? "Ir a Configuración de Métodos de Cobro (Venezuela y Cripto) ↓"
+                        : "Ir a Configuración de Métodos de Cobro (USDT) ↓"}
                     </a>
                   </div>
                 )}
@@ -469,10 +519,14 @@ export default function CreatorWithdrawalHub({
               {/* Botón de solicitud */}
               <button
                 type="submit"
-                disabled={loading || paymentMethods.length === 0 || numericAmount <= 0}
+                disabled={loading || usableMethods.length === 0 || numericAmount <= 0}
                 className="w-full py-3.5 px-5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold transition shadow-lg shadow-rose-600/30 flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {loading ? "Procesando solicitud..." : "Solicitar Retiro en Bolívares"}
+                {loading
+                  ? "Procesando solicitud..."
+                  : showBolivares
+                  ? "Solicitar Retiro en Bolívares"
+                  : "Solicitar Retiro en USDT"}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
@@ -503,30 +557,46 @@ export default function CreatorWithdrawalHub({
                   <strong className="text-amber-400 text-sm">{calculatedNetKoin.toFixed(2)} KOIN</strong>
                 </div>
 
-                <div className="flex justify-between items-center text-slate-400 pb-2 border-b border-slate-800">
-                  <span>Tasa Paralelo DolarAPI:</span>
-                  <strong className="text-emerald-400">Bs. {tasaParalelo.toLocaleString("es-VE", { minimumFractionDigits: 2 })}</strong>
-                </div>
+                {showBolivares ? (
+                  <>
+                    <div className="flex justify-between items-center text-slate-400 pb-2 border-b border-slate-800">
+                      <span>Tasa Paralelo DolarAPI:</span>
+                      <strong className="text-emerald-400">Bs. {tasaParalelo.toLocaleString("es-VE", { minimumFractionDigits: 2 })}</strong>
+                    </div>
 
-                {/* Resultado en Bolívares */}
-                <div className="p-4 bg-slate-950 border border-emerald-500/30 rounded-2xl mt-4 text-center">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Monto que recibirás en tu banco
-                  </span>
-                  <div className="text-2xl font-black text-emerald-400">
-                    {formatBs(calculatedBs)}
+                    {/* Resultado en Bolívares */}
+                    <div className="p-4 bg-slate-950 border border-emerald-500/30 rounded-2xl mt-4 text-center">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Monto que recibirás en tu banco
+                      </span>
+                      <div className="text-2xl font-black text-emerald-400">
+                        {formatBs(calculatedBs)}
+                      </div>
+                      <span className="text-[10px] text-slate-500 mt-1 block">
+                        Calculado 100% en base al Valor Paralelo oficial de la API.
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-4 bg-slate-950 border border-emerald-500/30 rounded-2xl mt-4 text-center">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Monto neto que recibirás en USDT
+                    </span>
+                    <div className="text-2xl font-black text-emerald-400 font-mono">
+                      ${calculatedNetKoin.toFixed(2)} USDT
+                    </div>
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Pago internacional directo 1:1 en USDT sin conversión a Bolívares.
+                    </span>
                   </div>
-                  <span className="text-[10px] text-slate-500 mt-1 block">
-                    Calculado 100% en base al Valor Paralelo oficial de la API.
-                  </span>
-                </div>
+                )}
               </div>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-800 text-[11px] text-slate-500 leading-relaxed flex items-start gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <span>
-                Tu solicitud quedará en estado <strong>EN ESPERA</strong>. Tan pronto como el Super Administrador realice la transferencia, verás el <strong>Número de Transferencia</strong> en tu historial de pagos.
+                Tu solicitud quedará en estado <strong>EN ESPERA</strong>. Tan pronto como el Super Administrador realice {isVenezuela ? "la transferencia o pago" : "el envío de USDT"}, verás la <strong>Referencia / TX Hash</strong> en tu historial de pagos.
               </span>
             </div>
           </div>
@@ -541,7 +611,9 @@ export default function CreatorWithdrawalHub({
             Historial de Solicitudes de Retiro y Pagos
           </h2>
           <p className="text-xs text-slate-400 mb-6">
-            Monitorea el estado de tus retiros en tiempo real y consulta los números de transferencia bancaria registrados por el Administrador.
+            {isVenezuela
+              ? "Monitorea el estado de tus retiros en tiempo real y consulta los números de transferencia bancaria o TX Hash registrados por el Administrador."
+              : "Monitorea el estado de tus retiros en USDT y consulta los TX Hash / referencias registradas por el Administrador."}
           </p>
 
           {payouts.length > 0 ? (
@@ -589,21 +661,25 @@ export default function CreatorWithdrawalHub({
                       </div>
                     ) : (
                       <div className="pt-1 text-[11px] text-amber-400/90 italic">
-                        El Administrador está procesando la transferencia bancaria. Tan pronto se liquide, aparecerá tu número de referencia aquí.
+                        {isVenezuela
+                          ? "El Administrador está procesando el pago. Tan pronto se liquide, aparecerá tu número de referencia aquí."
+                          : "El Administrador está procesando el envío en USDT. Tan pronto se liquide, aparecerá tu TX Hash o referencia aquí."}
                       </div>
                     )}
                   </div>
 
-                  {/* Monto en Bolívares */}
+                  {/* Monto final (Bolívares o USDT directo) */}
                   <div className="text-right shrink-0">
                     <span className="text-[10px] text-slate-500 block uppercase font-semibold">
-                      Monto en Bolívares
+                      {p.amountVes ? "Monto en Bolívares" : "Monto en USDT"}
                     </span>
                     <div className="text-xl font-black text-emerald-400 font-mono">
-                      {p.amountVes ? formatBs(p.amountVes) : `$${p.netKoin.toFixed(2)} USD`}
+                      {p.amountVes ? formatBs(p.amountVes) : `$${p.netKoin.toFixed(2)} USDT`}
                     </div>
                     <span className="text-[10px] text-slate-500">
-                      Tasa: Bs. {p.usdRateVes?.toFixed(2) || tasaParalelo.toFixed(2)}
+                      {p.amountVes
+                        ? `Tasa: Bs. ${p.usdRateVes?.toFixed(2) || tasaParalelo.toFixed(2)}`
+                        : "Liquidación directa USDT"}
                     </span>
                   </div>
                 </div>
@@ -611,7 +687,7 @@ export default function CreatorWithdrawalHub({
             </div>
           ) : (
             <div className="text-center py-12 text-xs text-slate-500 bg-slate-950 rounded-2xl border border-slate-800">
-              Aún no has realizado solicitudes de retiro. Usa la pestaña "Solicitar Retiro en Bolívares" para cobrar tus ganancias.
+              Aún no has realizado solicitudes de retiro. Usa la pestaña superior para solicitar el cobro de tus ganancias.
             </div>
           )}
         </div>

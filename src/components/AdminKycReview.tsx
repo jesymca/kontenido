@@ -199,9 +199,13 @@ export default function AdminKycReview({ documents }: Props) {
             </div>
 
             {/* Datos extraídos */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-950 border border-slate-800/80 rounded-2xl text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-4 bg-slate-950 border border-slate-800/80 rounded-2xl text-xs">
               <div>
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Cédula:</span>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Tipo Doc:</span>
+                <span className="text-amber-300 font-bold text-xs">{doc.documentType}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Número ID / Cédula:</span>
                 <span className="text-white font-mono font-bold text-sm">{doc.extractedCedula || "—"}</span>
               </div>
               <div>

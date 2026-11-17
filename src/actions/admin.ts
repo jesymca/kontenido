@@ -139,6 +139,8 @@ export async function updateAdminUserAction(formData: FormData): Promise<{ succe
     const suspensionReason = (formData.get("suspensionReason") as string) || null;
     const kycStatus = (formData.get("kycStatus") as "NONE" | "PENDING" | "APPROVED" | "REJECTED") || null;
     const birthDate = (formData.get("birthDate") as string)?.trim() || null;
+    const country = (formData.get("country") as string)?.trim().toUpperCase() || null;
+    const gender = (formData.get("gender") as string)?.trim().toUpperCase() || null;
 
     const now = new Date().toISOString();
 
@@ -157,6 +159,12 @@ export async function updateAdminUserAction(formData: FormData): Promise<{ succe
     }
     if (birthDate !== undefined) {
       updatePayload.birthDate = birthDate;
+    }
+    if (country) {
+      updatePayload.country = country;
+    }
+    if (gender && ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"].includes(gender)) {
+      updatePayload.gender = gender;
     }
 
     await db

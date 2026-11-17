@@ -4,6 +4,7 @@ import { useState } from "react";
 import UserLevelBadge from "./UserLevelBadge";
 import { updateAdminUserAction, toggleUserSuspensionAction } from "@/actions/admin";
 import CreatorContentModal, { CreatorPostModalItem } from "./CreatorContentModal";
+import { COUNTRIES, USER_GENDERS, getCountryMeta } from "@/lib/countries";
 import {
   Edit2,
   ShieldAlert,
@@ -32,6 +33,8 @@ interface UserItem {
   status: "PENDING" | "ACTIVE" | "SUSPENDED";
   kycStatus: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
   birthDate?: string | null;
+  country?: string | null;
+  gender?: string | null;
   level: number;
   vipMembershipId?: string | null;
   allowDownload: number;
@@ -206,6 +209,10 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                                 {u.profile.displayName}
                               </span>
                             )}
+                            <span className="text-[10px] text-slate-500 block pl-1">
+                              {getCountryMeta(u.country).flag} {getCountryMeta(u.country).name}
+                              {u.gender ? ` • ${u.gender}` : ""}
+                            </span>
                           </div>
                         );
                       })()}
@@ -438,6 +445,39 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                     <option value="ACTIVE">ACTIVE</option>
                     <option value="PENDING">PENDING</option>
                     <option value="SUSPENDED">SUSPENDED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">País</label>
+                  <select
+                    name="country"
+                    defaultValue={editingUser.country || "VE"}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white"
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.flag} {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Género</label>
+                  <select
+                    name="gender"
+                    defaultValue={editingUser.gender || ""}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white"
+                  >
+                    <option value="">Sin especificar</option>
+                    {USER_GENDERS.map((g) => (
+                      <option key={g.value} value={g.value}>
+                        {g.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

@@ -28,6 +28,9 @@ export const users = sqliteTable("users", {
   allowDownload: integer("allow_download").notNull().default(0), // 1 si el usuario VIP tiene permiso de descarga autorizado
   suspensionReason: text("suspension_reason"), // Motivo si el usuario fue suspendido (ej: intento de descarga no autorizada)
   image: text("image"), // Imagen externa opcional (ej: avatar de Google)
+  country: text("country").notNull().default("VE"), // Código de país ISO-2 ('VE' para Venezuela, o país internacional -> solo USDT)
+  gender: text("gender", { enum: ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"] }), // Género declarado al registrarse (usado para KOMESTIBLE / límite de likes a HOMBRES)
+  komestibleBonusLikes: integer("komestible_bonus_likes").notNull().default(0), // Likes adicionales otorgados por SUPER_ADMIN en KOMESTIBLE
   createdAt: text("created_at").notNull(), // Fecha y hora de creación ISO
   updatedAt: text("updated_at").notNull(), // Fecha y hora de última actualización ISO
 });
@@ -173,13 +176,14 @@ export const paymentMethods = sqliteTable("payment_methods", {
   creatorId: text("creator_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  type: text("type", { enum: ["BANK_TRANSFER", "PAGOMOVIL", "BINANCE"] }).notNull(),
+  type: text("type", { enum: ["BANK_TRANSFER", "PAGOMOVIL", "BINANCE", "USDT_WALLET"] }).notNull(),
   bankId: integer("bank_id").references(() => banks.id), // Si es transferencia o pagomóvil
   accountNumber: text("account_number"), // Número de cuenta de 20 dígitos
   accountHolder: text("account_holder"), // Nombre completo del titular
   idDocument: text("id_document"), // Cédula de identidad (V-12345678)
   phone: text("phone"), // Teléfono para PagoMóvil (0414-...)
-  binanceEmail: text("binance_email"), // Correo o Pay ID / Wallet USDT
+  binanceEmail: text("binance_email"), // Correo, Pay ID o dirección de Wallet USDT
+  usdtNetwork: text("usdt_network"), // Red cripto (TRC20, BEP20, ERC20, POLYGON, SOLANA) para USDT_WALLET
   isActive: integer("is_active").notNull().default(1),
   createdAt: text("created_at").notNull(),
 });
@@ -630,6 +634,115 @@ export const profileFavorites = sqliteTable("profile_favorites", {
 
 /**
  * ============================================================================
+ * TABLA: komestible_photos (Fotos subidas gratuitamente en KOMESTIBLE estilo Badoo)
+ * Cualquier usuario registrado puede subir fotos para ser valoradas y descubrir matches.
+ * ============================================================================
+ */
+export const komestiblePhotos = sqliteTable("komestible_photos", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  mediaKey: text("media_key").notNull(),
+  caption: text("caption"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  likesReceived: integer("likes_received").notNull().default(0),
+  ratingSum: integer("rating_sum").notNull().default(0),
+  ratingCount: integer("rating_count").notNull().default(0),
+  avgRating: real("avg_rating").notNull().default(0),
+  viewsCount: integer("views_count").notNull().default(0),
+  status: text("status", { enum: ["PENDING", "APPROVED", "REJECTED"] })
+    .notNull()
+    .default("APPROVED"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: komestible_swipes (Swipe Cards / Binary Rating Feed: LIKE o PASS)
+ * Los usuarios registrados como HOMBRES tienen límite configurable por SUPER_ADMIN.
+ * ============================================================================
+ */
+export const komestibleSwipes = sqliteTable("komestible_swipes", {
+  id: text("id").primaryKey(),
+  swiperId: text("swiper_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  targetUserId: text("target_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  photoId: text("photo_id"),
+  action: text("action", { enum: ["LIKE", "PASS"] }).notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: komestible_photo_ratings (Valoraciones individuales 1-5 a fotos en KOMESTIBLE)
+ * ============================================================================
+ */
+export const komestiblePhotoRatings = sqliteTable("komestible_photo_ratings", {
+  id: text("id").primaryKey(),
+  raterId: text("rater_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  photoId: text("photo_id")
+    .notNull()
+    .references(() => komestiblePhotos.id, { onDelete: "cascade" }),
+  targetUserId: text("target_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  score: integer("score").notNull(), // 1 a 5
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: komestible_matches (Espacio de KOINCIDEN — Double Opt-In Matchmaking)
+ * Se crea automáticamente cuando dos usuarios se dan LIKE mutuamente en KOMESTIBLE.
+ * ============================================================================
+ */
+export const komestibleMatches = sqliteTable("komestible_matches", {
+  id: text("id").primaryKey(),
+  userAId: text("user_a_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  userBId: text("user_b_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  matchedByUserId: text("matched_by_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["ACTIVE", "UNMATCHED", "BLOCKED"] })
+    .notNull()
+    .default("ACTIVE"),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
+ * TABLA: koinciden_messages (Chat gratuito entre usuarios con match en KOINCIDEN)
+ * ============================================================================
+ */
+export const koincidenMessages = sqliteTable("koinciden_messages", {
+  id: text("id").primaryKey(),
+  matchId: text("match_id")
+    .notNull()
+    .references(() => komestibleMatches.id, { onDelete: "cascade" }),
+  senderId: text("sender_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  receiverId: text("receiver_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  isRead: integer("is_read").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
  * RELACIONES DRIZZLE ORM
  * ============================================================================
  */
@@ -662,6 +775,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   likesReceived: many(profileLikes, { relationName: "creatorLikes" }),
   favoritesGiven: many(profileFavorites, { relationName: "userFavorites" }),
   favoritesReceived: many(profileFavorites, { relationName: "creatorFavorites" }),
+  komestiblePhotos: many(komestiblePhotos),
+  komestibleSwipesGiven: many(komestibleSwipes, { relationName: "swiper" }),
+  komestibleSwipesReceived: many(komestibleSwipes, { relationName: "swipeTarget" }),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -929,5 +1045,64 @@ export const profileFavoritesRelations = relations(profileFavorites, ({ one }) =
     fields: [profileFavorites.creatorId],
     references: [users.id],
     relationName: "creatorFavorites",
+  }),
+}));
+
+export const komestiblePhotosRelations = relations(komestiblePhotos, ({ one, many }) => ({
+  user: one(users, {
+    fields: [komestiblePhotos.userId],
+    references: [users.id],
+  }),
+  ratings: many(komestiblePhotoRatings),
+}));
+
+export const komestibleSwipesRelations = relations(komestibleSwipes, ({ one }) => ({
+  swiper: one(users, {
+    fields: [komestibleSwipes.swiperId],
+    references: [users.id],
+    relationName: "swiper",
+  }),
+  target: one(users, {
+    fields: [komestibleSwipes.targetUserId],
+    references: [users.id],
+    relationName: "swipeTarget",
+  }),
+}));
+
+export const komestiblePhotoRatingsRelations = relations(komestiblePhotoRatings, ({ one }) => ({
+  rater: one(users, {
+    fields: [komestiblePhotoRatings.raterId],
+    references: [users.id],
+  }),
+  photo: one(komestiblePhotos, {
+    fields: [komestiblePhotoRatings.photoId],
+    references: [komestiblePhotos.id],
+  }),
+}));
+
+export const komestibleMatchesRelations = relations(komestibleMatches, ({ one, many }) => ({
+  userA: one(users, {
+    fields: [komestibleMatches.userAId],
+    references: [users.id],
+  }),
+  userB: one(users, {
+    fields: [komestibleMatches.userBId],
+    references: [users.id],
+  }),
+  messages: many(koincidenMessages),
+}));
+
+export const koincidenMessagesRelations = relations(koincidenMessages, ({ one }) => ({
+  match: one(komestibleMatches, {
+    fields: [koincidenMessages.matchId],
+    references: [komestibleMatches.id],
+  }),
+  sender: one(users, {
+    fields: [koincidenMessages.senderId],
+    references: [users.id],
+  }),
+  receiver: one(users, {
+    fields: [koincidenMessages.receiverId],
+    references: [users.id],
   }),
 }));

@@ -6,6 +6,7 @@ import { updateProfileAction } from "@/actions/creator";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import { CREATOR_CATEGORIES } from "@/lib/creatorCategories";
+import { COUNTRIES, isVenezuelanUser } from "@/lib/countries";
 import ImageCropModal from "@/components/ImageCropModal";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
 import {
@@ -47,6 +48,7 @@ interface Props {
   username: string;
   kycStatus?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
   managedCreatorId?: string;
+  initialCountry?: string;
 }
 
 export default function ProfileForm({
@@ -54,6 +56,7 @@ export default function ProfileForm({
   username,
   kycStatus = "NONE",
   managedCreatorId,
+  initialCountry = "VE",
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -66,6 +69,8 @@ export default function ProfileForm({
   const [creatorCategory, setCreatorCategory] = useState(
     profile?.creatorCategory || "MUJER"
   );
+  const [countryState, setCountryState] = useState(initialCountry || "VE");
+  const isVenezuela = isVenezuelanUser(countryState);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -463,6 +468,31 @@ export default function ProfileForm({
             onValidityChange={(valid) => setIsUsernameValid(valid)}
           />
         </div>
+
+        {!managedCreatorId && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-2">
+              País de Residencia (Define métodos de cobro)
+            </label>
+            <select
+              name="country"
+              value={countryState}
+              onChange={(e) => setCountryState(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-sm focus:border-rose-500 focus:outline-hidden"
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.flag} {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-500 mt-1">
+              {isVenezuela
+                ? "Modo Venezuela: retiros en Bolívares (Banco/PagoMóvil) o Binance USDT."
+                : "Modo Internacional: todos tus pagos y retiros se procesan directamente en USDT."}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -554,7 +584,9 @@ export default function ProfileForm({
                 ? "Tu documento fue validado. Tu insignia de Verificada está activa en tu perfil."
                 : kycStatus === "PENDING"
                 ? "Tus fotos están siendo revisadas por la administración. Pronto recibirás la aprobación."
-                : "Debes subir tu cédula venezolana y selfie para que tu cuenta aparezca Verificada y puedas publicar."}
+                : isVenezuela
+                ? "Debes subir tu cédula venezolana (o pasaporte) y selfie para que tu cuenta aparezca Verificada."
+                : "Debes subir tu documento de identidad o pasaporte vigente y selfie para que tu cuenta aparezca Verificada."}
             </p>
           </div>
         </div>

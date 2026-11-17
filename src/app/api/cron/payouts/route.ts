@@ -4,15 +4,18 @@ import { users, payouts, wallets, settings, auditLog } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getDolarRates } from "@/lib/dolarapi";
 import { getCreatorCommissionTier } from "@/lib/commissions";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { isVenezuelanUser } from "@/lib/countries";
 
 /**
- * Cron de Vercel para generar cortes semanales a creadoras
+ * Cron de Vercel para generar cortes semanales a creadores
  * Se ejecuta automáticamente cada lunes a las 00:00 UTC.
- * Calcula las comisiones escalonadas (10%, 15%, 20%) y el monto exacto en Bolívares (VES)
- * según el Valor Paralelo de ve.dolarapi.com.
+ * - Creadoras en Venezuela: calcula comisión escalonada y monto en Bolívares (VES) según DolarAPI.
+ * - Creadoras internacionales (fuera de Venezuela): liquida directamente en USDT sin conversión a Bolívares.
  */
 export async function GET(req: Request) {
   try {
+    await ensureKomestibleSchema();
     // Validar autorización de Vercel Cron
     const authHeader = req.headers.get("authorization");
     if (
@@ -49,10 +52,11 @@ export async function GET(req: Request) {
       const grossKoin = c.wallet?.totalEarnedKoin || 0;
       if (grossKoin > 0) {
         // Calcular porcentaje según su status / volumen general
-        const tierInfo = getCreatorCommissionTier(grossKoin, settingsMap);
+        const tierInfo = getCreatorCommissionTier(grossKoin, settingsMap, c.level);
         const feeKoin = Number(((grossKoin * tierInfo.feePct) / 100).toFixed(2));
         const netKoin = Number((grossKoin - feeKoin).toFixed(2));
-        const amountVes = Number((netKoin * tasaParalelo).toFixed(2));
+        const isVzla = isVenezuelanUser(c.country);
+        const amountVes = isVzla ? Number((netKoin * tasaParalelo).toFixed(2)) : null;
 
         // Crear payout en estado PENDING ("EN ESPERA")
         await db.insert(payouts).values({
@@ -64,7 +68,7 @@ export async function GET(req: Request) {
           feeKoin,
           netKoin,
           feePct: tierInfo.feePct,
-          usdRateVes: tasaParalelo,
+          usdRateVes: isVzla ? tasaParalelo : null,
           amountVes,
           status: "PENDING",
           createdAt: periodEnd,

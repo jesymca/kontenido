@@ -5,17 +5,19 @@ import { processPayoutAction } from "@/actions/admin";
 import { Check, DollarSign, Wallet, Landmark, Smartphone, Coins, ArrowRight, ShieldCheck, Clock, CheckCircle2, Hash } from "lucide-react";
 import { formatBs } from "@/lib/dolarapi";
 import { formatKoin } from "@/lib/utils";
+import { getCountryMeta, isVenezuelanUser } from "@/lib/countries";
 
 interface PaymentMethodItem {
   id: string;
   creatorId: string;
-  type: "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE";
+  type: "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE" | "USDT_WALLET";
   accountHolder?: string | null;
   idDocument?: string | null;
   accountNumber?: string | null;
   accountType?: string | null;
   phone?: string | null;
   binanceEmail?: string | null;
+  usdtNetwork?: string | null;
   bank?: {
     nombreBanco: string;
     codigo?: string | null;
@@ -40,6 +42,7 @@ interface PayoutItem {
   createdAt: string;
   creator: {
     username: string;
+    country?: string | null;
   };
   paymentMethod?: PaymentMethodItem | null;
 }
@@ -86,6 +89,8 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
         payouts.map((p) => {
           const creatorMethods = paymentMethods.filter((m) => m.creatorId === p.creatorId);
           const chosenMethod = p.paymentMethod || creatorMethods.find((m) => m.id === p.paymentMethodId) || creatorMethods[0];
+          const countryMeta = getCountryMeta(p.creator.country);
+          const isVzla = isVenezuelanUser(p.creator.country);
 
           return (
             <div
@@ -94,8 +99,11 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
             >
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
                 <div>
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="text-base font-black text-white">@{p.creator.username}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                      {countryMeta.flag} {countryMeta.name}
+                    </span>
                     {p.status === "PAID" ? (
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" />
@@ -117,10 +125,10 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
                 <div className="flex items-center gap-4 bg-slate-950 p-3 rounded-2xl border border-slate-800">
                   <div className="text-right">
                     <span className="text-[10px] text-slate-400 font-semibold block uppercase">
-                      Neto a Transferir
+                      {p.amountVes ? "Neto a Transferir (Bs.)" : "Neto a Enviar (USDT)"}
                     </span>
                     <span className="text-lg font-black text-emerald-400">
-                      {p.amountVes ? formatBs(p.amountVes) : `$${p.netKoin.toFixed(2)} USD`}
+                      {p.amountVes ? formatBs(p.amountVes) : `$${p.netKoin.toFixed(2)} USDT`}
                     </span>
                   </div>
                   <div className="pl-3 border-l border-slate-800 text-left">
@@ -128,7 +136,13 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
                       Neto: <strong>{p.netKoin.toFixed(2)} KOIN</strong>
                     </span>
                     <span className="text-[10px] text-slate-500 block">
-                      Tasa: <strong>Bs. {p.usdRateVes?.toFixed(2) || "—"}</strong>
+                      {p.amountVes ? (
+                        <>
+                          Tasa: <strong>Bs. {p.usdRateVes?.toFixed(2) || "—"}</strong>
+                        </>
+                      ) : (
+                        <strong className="text-amber-400">Pago USDT 1:1</strong>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -155,10 +169,10 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
                   </div>
                 </div>
 
-                {/* Datos de Pago / Cuenta Bancaria de la Creadora */}
+                {/* Datos de Pago / Cuenta Bancaria o USDT de la Creadora */}
                 <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-xs space-y-1.5">
                   <span className="text-[11px] font-bold text-slate-300 block uppercase tracking-wider">
-                    Destino del Pago en Venezuela
+                    {isVzla ? "Destino del Pago (Venezuela / Cripto)" : "Destino del Pago Internacional (USDT)"}
                   </span>
                   {chosenMethod ? (
                     <div>
@@ -196,10 +210,22 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
                         <div className="space-y-0.5 text-slate-300">
                           <div className="font-semibold text-white flex items-center gap-1.5">
                             <Coins className="w-3.5 h-3.5 text-yellow-400" />
-                            Binance Pay USDT
+                            Binance Pay / USDT
                           </div>
                           <div className="text-[11px] text-slate-400">
-                            Email: <strong className="text-slate-200">{chosenMethod.binanceEmail}</strong>
+                            Pay ID / Email: <strong className="text-slate-200 font-mono break-all">{chosenMethod.binanceEmail}</strong>
+                          </div>
+                        </div>
+                      )}
+
+                      {chosenMethod.type === "USDT_WALLET" && (
+                        <div className="space-y-0.5 text-slate-300">
+                          <div className="font-semibold text-white flex items-center gap-1.5">
+                            <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+                            Wallet USDT ({chosenMethod.usdtNetwork || "TRC20"})
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            Dirección: <strong className="text-slate-200 font-mono break-all">{chosenMethod.binanceEmail}</strong>
                           </div>
                         </div>
                       )}
@@ -227,7 +253,9 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
                 ) : (
                   <div className="text-[11px] text-amber-400/90 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5" />
-                    En espera de que el Super Administrador transfiera los Bolívares y asigne el número de referencia.
+                    {p.amountVes
+                      ? "En espera de que el Super Administrador transfiera los Bolívares y asigne el número de referencia."
+                      : "En espera de que el Super Administrador envíe los USDT y asigne el TX Hash / referencia."}
                   </div>
                 )}
 
@@ -260,7 +288,9 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
               Confirmar Liquidación de Pago
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Realiza la transferencia en Bolívares a la creadora e ingresa el número de referencia bancario.
+              {activeModalPayout.amountVes
+                ? "Realiza la transferencia en Bolívares a la creadora e ingresa el número de referencia bancario."
+                : "Realiza el envío directo en USDT a la creadora e ingresa el TX Hash o referencia de Binance."}
             </p>
 
             <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl mb-4 space-y-1.5 text-xs">
@@ -269,15 +299,19 @@ export default function AdminPayoutsList({ payouts, paymentMethods }: Props) {
                 <strong className="text-white">@{activeModalPayout.creator.username}</strong>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Monto en Bolívares:</span>
+                <span className="text-slate-400">
+                  {activeModalPayout.amountVes ? "Monto en Bolívares:" : "Monto a Enviar en USDT:"}
+                </span>
                 <strong className="text-emerald-400 text-sm">
-                  {activeModalPayout.amountVes ? formatBs(activeModalPayout.amountVes) : `$${activeModalPayout.netKoin} USD`}
+                  {activeModalPayout.amountVes ? formatBs(activeModalPayout.amountVes) : `$${activeModalPayout.netKoin.toFixed(2)} USDT`}
                 </strong>
               </div>
-              <div className="flex justify-between text-[11px] text-slate-500">
-                <span>Tasa Paralelo fijada:</span>
-                <span>Bs. {activeModalPayout.usdRateVes?.toFixed(2) || "—"} / USD</span>
-              </div>
+              {activeModalPayout.amountVes && (
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <span>Tasa Paralelo fijada:</span>
+                  <span>Bs. {activeModalPayout.usdRateVes?.toFixed(2) || "—"} / USD</span>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handlePay} className="space-y-4">

@@ -26,6 +26,8 @@ import { getCreatorCommissionTier } from "@/lib/commissions";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import { resolveCreatorTarget } from "@/lib/creatorTarget";
 import { ensureChatSchema } from "@/lib/db/initChat";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { isVenezuelanUser } from "@/lib/countries";
 
 const RESERVED_USERNAMES = new Set([
   "admin",
@@ -43,6 +45,8 @@ const RESERVED_USERNAMES = new Set([
   "kontenido",
   "root",
   "support",
+  "komestible",
+  "koinciden",
 ]);
 
 /**
@@ -161,6 +165,7 @@ export async function checkUsernameAvailabilityAction(
  */
 export async function updateProfileAction(formData: FormData) {
   await ensureChatSchema();
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user) {
     return { error: "No autorizado" };
@@ -194,6 +199,8 @@ export async function updateProfileAction(formData: FormData) {
   const isAiGenerated = formData.get("isAiGenerated") === "on" || formData.get("isAiGenerated") === "1" ? 1 : 0;
   const avatarKey = (formData.get("avatarKey") as string) || undefined;
   const bannerKey = (formData.get("bannerKey") as string) || undefined;
+  const countryRaw = (formData.get("country") as string)?.trim().toUpperCase();
+  const country = countryRaw && /^[A-Z]{2,5}$/.test(countryRaw) ? countryRaw : undefined;
 
   if (!displayName) {
     return { error: "El nombre para mostrar es obligatorio." };
@@ -261,6 +268,17 @@ export async function updateProfileAction(formData: FormData) {
     })
     .where(eq(profiles.userId, userId));
 
+  if (country || !target.isAgencyManaged) {
+    await db
+      .update(users)
+      .set({
+        ...(country ? { country } : {}),
+        gender: creatorCategory,
+        updatedAt: now,
+      })
+      .where(eq(users.id, userId));
+  }
+
   revalidatePath("/", "layout");
   revalidatePath(`/${targetCurrentUsername}`);
   revalidatePath(`/${finalUsername}`);
@@ -273,19 +291,31 @@ export async function updateProfileAction(formData: FormData) {
 }
 
 /**
- * Guardar o actualizar un método de pago del creador (1 de las 3 opciones exactas)
+ * Guardar o actualizar un método de pago del creador
+ * - Venezuela: Transferencia bancaria, PagoMóvil, Binance USDT o Wallet USDT
+ * - Internacional: Binance USDT o Wallet USDT (sin Bolívares)
  */
 export async function savePaymentMethodAction(formData: FormData) {
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user) {
     return { error: "No autorizado" };
   }
 
   const userId = session.user.id;
-  const type = formData.get("type") as "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE";
+  const currentUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+  });
+  const isVenezuela = isVenezuelanUser(currentUser?.country);
 
-  if (!["BANK_TRANSFER", "PAGOMOVIL", "BINANCE"].includes(type)) {
+  const type = formData.get("type") as "BANK_TRANSFER" | "PAGOMOVIL" | "BINANCE" | "USDT_WALLET";
+
+  if (!["BANK_TRANSFER", "PAGOMOVIL", "BINANCE", "USDT_WALLET"].includes(type)) {
     return { error: "Tipo de método de pago no admitido." };
+  }
+
+  if (!isVenezuela && (type === "BANK_TRANSFER" || type === "PAGOMOVIL")) {
+    return { error: "Los usuarios fuera de Venezuela solo pueden configurar métodos de cobro en USDT." };
   }
 
   const now = new Date().toISOString();
@@ -342,6 +372,22 @@ export async function savePaymentMethodAction(formData: FormData) {
       creatorId: userId,
       type,
       binanceEmail,
+      isActive: 1,
+      createdAt: now,
+    });
+  } else if (type === "USDT_WALLET") {
+    const walletAddress = (formData.get("binanceEmail") as string)?.trim();
+    const usdtNetwork = (formData.get("usdtNetwork") as string)?.trim() || "TRC20";
+    if (!walletAddress || walletAddress.length < 10) {
+      return { error: "Ingresa una dirección de wallet USDT válida." };
+    }
+
+    await db.insert(paymentMethods).values({
+      id,
+      creatorId: userId,
+      type,
+      binanceEmail: walletAddress,
+      usdtNetwork,
       isActive: 1,
       createdAt: now,
     });
@@ -560,6 +606,7 @@ export async function deletePostWithBackupAction(postId: string) {
  * y coloca el retiro en estado "PENDING" ("EN ESPERA") hasta aprobación por SUPER_ADMIN.
  */
 export async function requestPayoutAction(formData: FormData) {
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user || (session.user.role !== "CREATOR" && session.user.role !== "SUPER_ADMIN")) {
     return { error: "No autorizado. Solo creadoras de contenido pueden solicitar retiros." };
@@ -578,7 +625,7 @@ export async function requestPayoutAction(formData: FormData) {
   }
 
   if (!paymentMethodId) {
-    return { error: "Debes seleccionar una cuenta bancaria o PagoMóvil para recibir los Bolívares." };
+    return { error: "Debes seleccionar un método de cobro configurado." };
   }
 
   // 1. Verificar billetera y saldo disponible
@@ -601,24 +648,43 @@ export async function requestPayoutAction(formData: FormData) {
     return { error: "El método de cobro seleccionado no es válido o está inactivo." };
   }
 
-  // 3. Consultar configuraciones y calcular comisión escalonada por Nivel de Creadora (ej: Nivel 0-30 = 20%, 31-60 = 15%)
+  // 3. Consultar configuraciones y país del usuario
   const currentUser = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });
+  const isVenezuela = isVenezuelanUser(currentUser?.country);
+  const isCryptoMethod = method.type === "BINANCE" || method.type === "USDT_WALLET";
+
+  if (!isVenezuela && !isCryptoMethod) {
+    return {
+      error: "Para cuentas internacionales fuera de Venezuela, el retiro debe realizarse mediante Binance o Wallet USDT.",
+    };
+  }
+
   const allSettings = await db.query.settings.findMany();
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
   const fallbackRate = parseFloat(settingsMap.get("fallback_usd_ves_rate") || "1030.88");
 
   const tierInfo = getCreatorCommissionTier(wallet.totalEarnedKoin || 0, settingsMap, currentUser?.level);
 
-  // 4. Consultar API DolarApi en tiempo real (Tasa Paralelo de Venezuela)
-  const dolarInfo = await getDolarRates(fallbackRate);
-  const tasaParalelo = dolarInfo.paralelo;
-
-  // 5. Calcular desglose en KOIN y Bolívares
+  // 4. Calcular desglose en KOIN y (si es Venezuela en Bs.) consultar DolarApi
   const feeKoin = Number(((amountKoin * tierInfo.feePct) / 100).toFixed(2));
   const netKoin = Number((amountKoin - feeKoin).toFixed(2));
-  const amountVes = Number((netKoin * tasaParalelo).toFixed(2));
+
+  let tasaParalelo: number | null = null;
+  let amountVes: number | null = null;
+
+  if (isVenezuela && !isCryptoMethod) {
+    const dolarInfo = await getDolarRates(fallbackRate);
+    tasaParalelo = dolarInfo.paralelo;
+    amountVes = Number((netKoin * tasaParalelo).toFixed(2));
+  } else if (isVenezuela && method.type === "BINANCE") {
+    // Mantiene compatibilidad de referencia Bs. si la creadora venezolana usa Binance,
+    // mientras las cuentas internacionales operan 100% directo en USDT sin tasa VES.
+    const dolarInfo = await getDolarRates(fallbackRate);
+    tasaParalelo = dolarInfo.paralelo;
+    amountVes = Number((netKoin * tasaParalelo).toFixed(2));
+  }
 
   const now = new Date().toISOString();
   const payoutId = crypto.randomUUID();
@@ -650,6 +716,11 @@ export async function requestPayoutAction(formData: FormData) {
   });
 
   // 8. Registrar movimiento en la billetera
+  const txNotes =
+    amountVes && tasaParalelo
+      ? `Retiro en Bolívares en espera. Tasa Paralelo: Bs. ${tasaParalelo.toFixed(2)} / USD. Esperado en banco: Bs. ${amountVes.toLocaleString("es-VE", { minimumFractionDigits: 2 })}`
+      : `Retiro directo en USDT en espera. Neto a recibir: $${netKoin.toFixed(2)} USDT (${method.type === "USDT_WALLET" ? method.usdtNetwork || "USDT" : "Binance"})`;
+
   await db.insert(walletTransactions).values({
     id: crypto.randomUUID(),
     userId,
@@ -658,7 +729,7 @@ export async function requestPayoutAction(formData: FormData) {
     amountUsdt: netKoin,
     reference: `RETIRO-${payoutId.slice(0, 8).toUpperCase()}`,
     status: "PENDING",
-    notes: `Retiro en Bolívares en espera. Tasa Paralelo: Bs. ${tasaParalelo.toFixed(2)} / USD. Esperado en banco: Bs. ${amountVes.toLocaleString("es-VE", { minimumFractionDigits: 2 })}`,
+    notes: txNotes,
     createdAt: now,
   });
 
@@ -668,7 +739,10 @@ export async function requestPayoutAction(formData: FormData) {
 
   return {
     success: true,
-    message: `Solicitud de retiro enviada exitosamente. Tu solicitud está EN ESPERA de liquidación por el Administrador. Recibirás aproximadamente Bs. ${amountVes.toLocaleString("es-VE", { minimumFractionDigits: 2 })} en tu cuenta bancaria.`,
+    message:
+      amountVes !== null
+        ? `Solicitud de retiro enviada exitosamente. Tu solicitud está EN ESPERA de liquidación por el Administrador. Recibirás aproximadamente Bs. ${amountVes.toLocaleString("es-VE", { minimumFractionDigits: 2 })} en tu cuenta bancaria.`
+        : `Solicitud de retiro en USDT enviada exitosamente. Tu solicitud está EN ESPERA de liquidación por el Administrador. Recibirás $${netKoin.toFixed(2)} USDT en tu cuenta configurada.`,
     payoutId,
     amountVes,
     netKoin,

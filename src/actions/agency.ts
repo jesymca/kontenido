@@ -24,6 +24,8 @@ const RESERVED_USERNAMES = new Set([
   "registro",
   "suspendido",
   "mensajes",
+  "komestible",
+  "koinciden",
 ]);
 
 /**
@@ -200,6 +202,8 @@ export async function createAgencyCreatorAction(formData: FormData) {
     role: "CREATOR",
     status: "PENDING",
     kycStatus: "NONE",
+    country: session.user.country || "VE",
+    gender: creatorCategory,
     level: 0,
     allowDownload: 0,
     createdAt: now,

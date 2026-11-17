@@ -7,6 +7,9 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { Sparkles, ShieldCheck, ArrowRight } from "lucide-react";
 
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { isVenezuelanUser } from "@/lib/countries";
+
 /**
  * Layout del Estudio de Creadora (/panel/*)
  * Verifica el rol contra Turso DB en tiempo real (evitando redirecciones erróneas por cookies antiguas en Edge)
@@ -17,6 +20,7 @@ export default async function PanelLayout({
 }: {
   children: React.ReactNode;
 }) {
+  await ensureKomestibleSchema();
   const session = await auth();
   if (!session?.user) {
     redirect("/login?callbackUrl=/panel");
@@ -95,13 +99,17 @@ export default async function PanelLayout({
           Activa tu Estudio de Creadora
         </h1>
         <p className="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
-          Tu cuenta actual (<strong>@{dbUser.username}</strong>) fue registrada como Consumidor. Si deseas publicar contenido exclusivo, configurar tus 3 planes de suscripción y retirar ganancias en Bolívares, activa tu perfil de Creadora en un clic.
+          Tu cuenta actual (<strong>@{dbUser.username}</strong>) fue registrada como Consumidor. Si deseas publicar contenido exclusivo, configurar tus 3 planes de suscripción y retirar ganancias{" "}
+          {isVenezuelanUser(dbUser.country) ? "en Bolívares o USDT" : "directamente en USDT"}, activa tu perfil de Creadora en un clic.
         </p>
 
         <div className="mt-6 p-4 bg-slate-950 border border-slate-800 rounded-2xl text-left text-xs text-slate-300 space-y-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Tu cuenta pasará a estado <strong>Falta Verificar</strong> hasta validar tu cédula venezolana.</span>
+            <span>
+              Tu cuenta pasará a estado <strong>Falta Verificar</strong> hasta validar tu{" "}
+              {isVenezuelanUser(dbUser.country) ? "cédula de identidad" : "documento oficial o pasaporte"}.
+            </span>
           </div>
         </div>
 
