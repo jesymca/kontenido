@@ -28,6 +28,7 @@ import { resolveCreatorTarget } from "@/lib/creatorTarget";
 import { ensureChatSchema } from "@/lib/db/initChat";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { isVenezuelanUser } from "@/lib/countries";
+import { createPostForCreator } from "@/lib/posts";
 
 const RESERVED_USERNAMES = new Set([
   "admin",
@@ -426,88 +427,14 @@ export async function createPostAction(formData: FormData) {
     return { error: "No autorizado" };
   }
 
-  const target = await resolveCreatorTarget(
-    session.user,
-    formData.get("managedCreatorId") as string | null
-  );
-  if (!target.ok) {
-    return { error: target.error };
-  }
-
-  const userId = target.creatorId;
-  const title = (formData.get("title") as string)?.trim();
-  const description = (formData.get("description") as string)?.trim();
-  const priceRaw = formData.get("priceKoin") as string;
-  const priceKoin = parseFloat(priceRaw) || 0.0;
-  const isPublicTeaserRaw = formData.get("isPublicTeaser") as string;
-  const isPublicTeaser = isPublicTeaserRaw === "1" ? 1 : 0;
-  const mediaKeysJson = formData.get("mediaKeys") as string; // JSON con los archivos subidos
-
-  if (!title) {
-    return { error: "El título de la publicación es obligatorio." };
-  }
-
-  // Bloquear números de teléfono, correos o intentos de contacto fuera de la plataforma
-  const titleFilter = validateNoExternalContact(title, "El título de la publicación");
-  if (!titleFilter.valid) {
-    return { error: titleFilter.error };
-  }
-  const descFilter = validateNoExternalContact(description, "La descripción de la publicación");
-  if (!descFilter.valid) {
-    return { error: descFilter.error };
-  }
-
-  const now = new Date().toISOString();
-  const postId = crypto.randomUUID();
-
-  // Crear post en estado PENDING_REVIEW para moderación
-  await db.insert(posts).values({
-    id: postId,
-    creatorId: userId,
-    title,
-    description,
-    priceKoin,
-    isPackageItem: 0,
-    isPublicTeaser,
-    status: "APPROVED", // Por agilidad y control directo
-    isDeleted: 0,
-    createdAt: now,
-    updatedAt: now,
+  return createPostForCreator(session.user, {
+    title: (formData.get("title") as string) || "",
+    description: (formData.get("description") as string) || "",
+    priceKoin: (formData.get("priceKoin") as string) || "0",
+    isPublicTeaser: (formData.get("isPublicTeaser") as string) || "0",
+    mediaItems: (formData.get("mediaKeys") as string) || "",
+    managedCreatorId: (formData.get("managedCreatorId") as string | null) || null,
   });
-
-  // Asociar elementos multimedia si fueron adjuntados
-  if (mediaKeysJson) {
-    try {
-      const items = JSON.parse(mediaKeysJson);
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        await db.insert(mediaAssets).values({
-          id: crypto.randomUUID(),
-          postId,
-          creatorId: userId,
-          type: item.type || "IMAGE",
-          originalKey: item.originalKey,
-          previewKey: item.previewKey || item.originalKey,
-          backupKey: `backups/${userId}/${item.originalKey.replace(/\//g, "_")}`,
-          mimeType: item.mimeType || "image/jpeg",
-          sizeBytes: item.sizeBytes || 0,
-          sortOrder: i,
-          moderationStatus: "OK",
-          isDeleted: 0,
-          createdAt: now,
-        });
-      }
-    } catch (e) {
-      console.error("Error asociando media al post:", e);
-    }
-  }
-
-  revalidatePath(`/${target.username}`);
-  revalidatePath("/panel");
-  revalidatePath("/agencia");
-  revalidatePath(`/agencia/creadoras/${userId}`);
-
-  return { success: true, postId };
 }
 
 /**

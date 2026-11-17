@@ -22,6 +22,7 @@ import { createPostAction } from "@/actions/creator";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
 import { watermarkImageFile } from "@/lib/watermarkClient";
+import { uploadFileToR2, resolveClientMimeType } from "@/lib/uploadClient";
 import MediaWatermark from "@/components/MediaWatermark";
 
 const QUICK_EMOJIS = ["🔥", "💋", "✨", "👑", "📸", "🌴", "💖", "😍", "😈", "🥂", "💎", "⭐", "🎉", "👀"];
@@ -74,23 +75,31 @@ export default function SocialPostComposer({
       const selected = Array.from(e.target.files);
       setFiles((prev) => [...prev, ...selected]);
 
-      const newPreviews = selected.map((f) => ({
-        url: URL.createObjectURL(f),
-        type: (f.type.startsWith("video/") ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
-        name: f.name,
-      }));
+      const newPreviews = selected.map((f) => {
+        const mime = resolveClientMimeType(f);
+        return {
+          url: URL.createObjectURL(f),
+          type: (mime.startsWith("video/") ? "VIDEO" : "IMAGE") as "IMAGE" | "VIDEO",
+          name: f.name,
+        };
+      });
       setFilePreviews((prev) => [...prev, ...newPreviews]);
+      e.target.value = "";
     }
   };
 
   const removeFile = (idx: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
-    setFilePreviews((prev) => prev.filter((_, i) => i !== idx));
+    setFilePreviews((prev) => {
+      const target = prev[idx];
+      if (target?.url) URL.revokeObjectURL(target.url);
+      return prev.filter((_, i) => i !== idx);
+    });
   };
 
   const handleCameraCapture = (file: File) => {
     setFiles((prev) => [...prev, file]);
-    const isVid = file.type.startsWith("video/");
+    const isVid = resolveClientMimeType(file).startsWith("video/");
     setFilePreviews((prev) => [
       ...prev,
       {
@@ -131,11 +140,17 @@ export default function SocialPostComposer({
     setProgress("Iniciando subida segura a Cloudflare R2...");
 
     try {
-      const uploadedMedia: any[] = [];
+      const uploadedMedia: Array<{
+        originalKey: string;
+        previewKey: string;
+        mimeType: string;
+        sizeBytes: number;
+        type: "IMAGE" | "VIDEO";
+      }> = [];
 
       for (let i = 0; i < files.length; i++) {
         let file = files[i];
-        const isImage = file.type.startsWith("image/");
+        const isImage = resolveClientMimeType(file).startsWith("image/");
 
         // Firmar fotos automáticamente con https://www.kontenido.online/{usuario}
         // manteniendo al 100% la perspectiva nativa (vertical u horizontal)
@@ -148,38 +163,15 @@ export default function SocialPostComposer({
           }
         }
 
-        setProgress(`Subiendo archivo ${i + 1} de ${files.length} directamente a R2...`);
-
-        // 1. Obtener URL prefirmada de R2
-        const presignedRes = await fetch("/api/uploads/presigned", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type,
-            sizeBytes: file.size,
-            category: "post",
-          }),
-        });
-
-        const presignedData = await presignedRes.json();
-        if (!presignedData.success) {
-          throw new Error(presignedData.error || "Error al obtener URL prefirmada de R2.");
-        }
-
-        // 2. Subir binario directo a Cloudflare R2
-        await fetch(presignedData.uploadUrl, {
-          method: "PUT",
-          body: file,
-          headers: { "Content-Type": file.type },
-        });
+        setProgress(`Subiendo archivo ${i + 1} de ${files.length} a Cloudflare R2...`);
+        const uploaded = await uploadFileToR2(file, "post");
 
         uploadedMedia.push({
-          originalKey: presignedData.key,
-          previewKey: presignedData.key,
-          mimeType: file.type,
-          sizeBytes: file.size,
-          type: file.type.startsWith("video/") ? "VIDEO" : "IMAGE",
+          originalKey: uploaded.key,
+          previewKey: uploaded.key,
+          mimeType: uploaded.mimeType,
+          sizeBytes: uploaded.sizeBytes,
+          type: uploaded.mimeType.startsWith("video/") ? "VIDEO" : "IMAGE",
         });
       }
 
@@ -194,12 +186,48 @@ export default function SocialPostComposer({
         formData.set("managedCreatorId", managedCreatorId);
       }
 
-      const res = await createPostAction(formData);
-      if (res.error) {
-        throw new Error(res.error);
+      let saveResult: { success?: boolean; error?: string; postId?: string };
+      try {
+        saveResult = await createPostAction(formData);
+      } catch {
+        // Respaldo REST si la Server Action falla por red o caché de despliegue
+        let apiRes: Response;
+        try {
+          apiRes = await fetch("/api/posts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: title.trim(),
+              description: description.trim(),
+              isPublicTeaser: postAccess === "free_teaser" ? "1" : "0",
+              priceKoin: postAccess === "ppv" ? priceKoin : "0",
+              mediaItems: uploadedMedia,
+              managedCreatorId,
+            }),
+          });
+        } catch {
+          throw new Error(
+            "No se pudo conectar con el servidor para guardar la publicación. Verifica tu conexión e inténtalo de nuevo."
+          );
+        }
+
+        const apiData = await apiRes.json().catch(() => null);
+        if (!apiRes.ok || apiData?.error) {
+          throw new Error(
+            apiData?.error || `Error del servidor al guardar publicación (HTTP ${apiRes.status}).`
+          );
+        }
+        saveResult = apiData;
+      }
+
+      if (saveResult.error) {
+        throw new Error(saveResult.error);
       }
 
       // Limpiar formulario
+      filePreviews.forEach((p) => {
+        if (p.url) URL.revokeObjectURL(p.url);
+      });
       setTitle("");
       setDescription("");
       setFiles([]);
@@ -216,7 +244,11 @@ export default function SocialPostComposer({
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.message || "Error al publicar contenido.");
+      const msg =
+        err?.message && err.message !== "Failed to fetch"
+          ? err.message
+          : "No se pudo conectar con el servidor o el almacenamiento para publicar. Verifica tu conexión e inténtalo de nuevo.";
+      setError(msg);
       setLoading(false);
       setProgress(null);
     }

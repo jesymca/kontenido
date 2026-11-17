@@ -33,6 +33,7 @@ import {
   type LikeQuotaInfo,
 } from "@/actions/komestible";
 import { COUNTRIES, USER_GENDERS } from "@/lib/countries";
+import { uploadFileToR2 } from "@/lib/uploadClient";
 
 export interface MyKomestiblePhotoItem {
   id: string;
@@ -146,32 +147,10 @@ export default function KomestibleHub({
     setUploadSuccess(null);
 
     try {
-      const presignedRes = await fetch("/api/uploads/presigned", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type || "image/jpeg",
-          sizeBytes: file.size,
-          category: "komestible",
-        }),
-      });
-      const presignedData = await presignedRes.json();
-      if (!presignedRes.ok || !presignedData.success) {
-        throw new Error(presignedData.error || "Error preparando subida de foto.");
-      }
-
-      const putRes = await fetch(presignedData.uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type || "image/jpeg" },
-      });
-      if (!putRes.ok) {
-        throw new Error(`Error al subir foto a R2 (HTTP ${putRes.status}).`);
-      }
+      const uploaded = await uploadFileToR2(file, "komestible");
 
       const saveRes = await uploadKomestiblePhotoAction({
-        mediaKey: presignedData.key,
+        mediaKey: uploaded.key,
         caption,
       });
 
@@ -182,7 +161,7 @@ export default function KomestibleHub({
       setMyPhotos((prev) => [
         {
           id: saveRes.photoId!,
-          mediaKey: presignedData.key,
+          mediaKey: uploaded.key,
           caption: caption.trim() || null,
           likesReceived: 0,
           avgRating: 0,

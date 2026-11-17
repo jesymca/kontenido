@@ -9,6 +9,7 @@ import { CREATOR_CATEGORIES } from "@/lib/creatorCategories";
 import { COUNTRIES, isVenezuelanUser } from "@/lib/countries";
 import ImageCropModal from "@/components/ImageCropModal";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
+import { uploadFileToR2 } from "@/lib/uploadClient";
 import {
   Check,
   AlertCircle,
@@ -113,51 +114,10 @@ export default function ProfileForm({
 
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
-  // Subir archivo a Cloudflare R2 vía URL prefirmada
+  // Subir archivo a Cloudflare R2 vía URL prefirmada con respaldo same-origin
   const uploadToR2 = async (file: File, category: "avatar" | "banner") => {
-    let res: Response;
-    try {
-      res = await fetch("/api/uploads/presigned", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type || "image/jpeg",
-          sizeBytes: file.size,
-          category,
-        }),
-      });
-    } catch (err: any) {
-      throw new Error("No se pudo conectar con el servidor para iniciar la subida.");
-    }
-
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "");
-      throw new Error(`Error del servidor al autorizar subida (${res.status}): ${errorText || "Sesión o permisos inválidos"}`);
-    }
-
-    const data = await res.json();
-    if (!data.success || !data.uploadUrl) {
-      throw new Error(data.error || `Error al obtener URL de subida de ${category}`);
-    }
-
-    try {
-      const uploadRes = await fetch(data.uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type || "image/jpeg" },
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error(`Cloudflare R2 rechazó la subida (HTTP ${uploadRes.status}).`);
-      }
-    } catch (err: any) {
-      throw new Error(
-        `Error al transferir la imagen a Cloudflare R2: ${err.message}. Verifica que el bucket 'kontenido' tenga CORS configurado.`
-      );
-    }
-
-    return data.key as string;
+    const uploaded = await uploadFileToR2(file, category);
+    return uploaded.key;
   };
 
   // Manejo de selección y encuadre/recorte interactivo de imágenes

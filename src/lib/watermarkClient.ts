@@ -17,6 +17,41 @@ export interface WatermarkOptions {
   includeDiagonal?: boolean; // True por defecto
 }
 
+const MAX_CANVAS_DIMENSION = 2560;
+
+function loadImageFromFile(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("No se pudo decodificar la imagen."));
+    };
+    img.src = objectUrl;
+  });
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality?: number
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality);
+  });
+}
+
+function replaceFileExtension(filename: string, ext: string): string {
+  if (!filename) return `foto.${ext}`;
+  const dotIdx = filename.lastIndexOf(".");
+  const base = dotIdx > 0 ? filename.slice(0, dotIdx) : filename;
+  return `${base}.${ext}`;
+}
+
 /**
  * Aplica la MARCA DE AGUA sobre un archivo de imagen (File)
  * y devuelve un nuevo objeto File con la marca de agua incrustada.
@@ -37,160 +72,207 @@ export async function watermarkImageFile(
   const position = options.position || "bottom-right";
   const includeDiagonal = options.includeDiagonal !== false;
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const width = img.naturalWidth || img.width;
-          const height = img.naturalHeight || img.height;
+  try {
+    const img = await loadImageFromFile(file);
+    const rawWidth = img.naturalWidth || img.width;
+    const rawHeight = img.naturalHeight || img.height;
+    if (!rawWidth || !rawHeight) {
+      return file;
+    }
 
-          // Crear canvas con las dimensiones EXACTAS de la foto original
-          // (Si la foto es vertical, height > width, y se mantiene 100% vertical)
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
+    // Escalar solo si excede MAX_CANVAS_DIMENSION preservando 100% la orientación y proporción nativa
+    const maxSide = Math.max(rawWidth, rawHeight);
+    const scale = maxSide > MAX_CANVAS_DIMENSION ? MAX_CANVAS_DIMENSION / maxSide : 1;
+    const width = Math.max(1, Math.round(rawWidth * scale));
+    const height = Math.max(1, Math.round(rawHeight * scale));
 
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            resolve(file);
-            return;
-          }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
 
-          // 1. Dibujar la fotografía base preservando perspectiva y orientación
-          ctx.drawImage(img, 0, 0, width, height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return file;
+    }
 
-          const minDim = Math.min(width, height);
+    // 1. Dibujar la fotografía base preservando perspectiva y orientación
+    ctx.drawImage(img, 0, 0, width, height);
 
-          // 2. MARCA DE AGUA DIAGONAL EN EL CENTRO DE LA FOTO (Anti-recorte y Anti-piratería)
-          if (includeDiagonal) {
-            ctx.save();
-            ctx.translate(width / 2, height / 2);
-            ctx.rotate((-22 * Math.PI) / 180);
+    const minDim = Math.min(width, height);
 
-            const diagonalFontSize = Math.max(18, Math.min(54, Math.round(minDim * 0.046)));
-            ctx.font = `900 ${diagonalFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
+    // 2. MARCA DE AGUA DIAGONAL EN EL CENTRO DE LA FOTO (Anti-recorte y Anti-piratería)
+    if (includeDiagonal) {
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.rotate((-22 * Math.PI) / 180);
 
-            // Sombra oscura suave para garantizar legibilidad sobre fondos claros
-            ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-            ctx.shadowBlur = 6;
-            ctx.shadowOffsetX = 1;
-            ctx.shadowOffsetY = 2;
+      const diagonalFontSize = Math.max(18, Math.min(54, Math.round(minDim * 0.046)));
+      ctx.font = `900 ${diagonalFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
 
-            // Borde tenue
-            ctx.lineWidth = Math.max(1, Math.round(diagonalFontSize * 0.05));
-            ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
-            ctx.strokeText(watermarkText.toUpperCase(), 0, 0);
+      // Sombra oscura suave para garantizar legibilidad sobre fondos claros
+      ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 2;
 
-            // Relleno semitransparente
-            ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
-            ctx.fillText(watermarkText.toUpperCase(), 0, 0);
+      // Borde tenue
+      ctx.lineWidth = Math.max(1, Math.round(diagonalFontSize * 0.05));
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.strokeText(watermarkText.toUpperCase(), 0, 0);
 
-            ctx.restore();
-          }
+      // Relleno semitransparente
+      ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+      ctx.fillText(watermarkText.toUpperCase(), 0, 0);
 
-          // 3. MARCA DE AGUA TIPO SELLO OFICIAL EN LA ESQUINA INFERIOR
-          const fontSize = Math.max(14, Math.min(36, Math.round(minDim * 0.026)));
-          const paddingX = Math.round(fontSize * 0.95);
-          const paddingY = Math.round(fontSize * 0.55);
-          const borderRadius = Math.round(fontSize * 0.45);
-          const margin = Math.round(minDim * 0.035);
+      ctx.restore();
+    }
 
-          ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-          ctx.textAlign = "left";
-          ctx.textBaseline = "middle";
+    // 3. MARCA DE AGUA TIPO SELLO OFICIAL EN LA ESQUINA INFERIOR
+    const fontSize = Math.max(14, Math.min(36, Math.round(minDim * 0.026)));
+    const paddingX = Math.round(fontSize * 0.95);
+    const paddingY = Math.round(fontSize * 0.55);
+    const borderRadius = Math.round(fontSize * 0.45);
+    const margin = Math.round(minDim * 0.035);
 
-          const textMetrics = ctx.measureText(watermarkText);
-          const textWidth = textMetrics.width;
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
 
-          const badgeWidth = textWidth + paddingX * 2 + fontSize * 1.1;
-          const badgeHeight = fontSize + paddingY * 2;
+    const textMetrics = ctx.measureText(watermarkText);
+    const textWidth = textMetrics.width;
 
-          let badgeX = width - badgeWidth - margin;
-          if (position === "bottom-left") {
-            badgeX = margin;
-          } else if (position === "bottom-center") {
-            badgeX = (width - badgeWidth) / 2;
-          }
-          const badgeY = height - badgeHeight - margin;
+    const badgeWidth = textWidth + paddingX * 2 + fontSize * 1.1;
+    const badgeHeight = fontSize + paddingY * 2;
 
-          // Sombra de la pastilla
-          ctx.save();
-          ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-          ctx.shadowBlur = Math.round(fontSize * 0.6);
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 2;
+    let badgeX = width - badgeWidth - margin;
+    if (position === "bottom-left") {
+      badgeX = margin;
+    } else if (position === "bottom-center") {
+      badgeX = (width - badgeWidth) / 2;
+    }
+    const badgeY = height - badgeHeight - margin;
 
-          // Fondo semitransparente oscuro
-          ctx.fillStyle = "rgba(8, 12, 24, 0.82)";
-          drawRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, borderRadius);
-          ctx.fill();
+    // Sombra de la pastilla
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+    ctx.shadowBlur = Math.round(fontSize * 0.6);
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2;
 
-          // Borde rosa de acento Kontenido
-          ctx.lineWidth = Math.max(1, Math.round(fontSize * 0.06));
-          ctx.strokeStyle = "rgba(244, 63, 94, 0.6)";
-          drawRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, borderRadius);
-          ctx.stroke();
-          ctx.restore();
+    // Fondo semitransparente oscuro
+    ctx.fillStyle = "rgba(8, 12, 24, 0.82)";
+    drawRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, borderRadius);
+    ctx.fill();
 
-          // Punto de verificación rosa
-          const iconRadius = Math.round(fontSize * 0.28);
-          const iconCenterX = badgeX + paddingX + iconRadius;
-          const iconCenterY = badgeY + badgeHeight / 2;
+    // Borde rosa de acento Kontenido
+    ctx.lineWidth = Math.max(1, Math.round(fontSize * 0.06));
+    ctx.strokeStyle = "rgba(244, 63, 94, 0.6)";
+    drawRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, borderRadius);
+    ctx.stroke();
+    ctx.restore();
 
-          ctx.save();
-          ctx.fillStyle = "#f43f5e";
-          ctx.beginPath();
-          ctx.arc(iconCenterX, iconCenterY, iconRadius, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+    // Punto de verificación rosa
+    const iconRadius = Math.round(fontSize * 0.28);
+    const iconCenterX = badgeX + paddingX + iconRadius;
+    const iconCenterY = badgeY + badgeHeight / 2;
 
-          // Texto de la marca de agua
-          const textX = iconCenterX + iconRadius + Math.round(fontSize * 0.5);
-          const textY = badgeY + badgeHeight / 2 + 1;
+    ctx.save();
+    ctx.fillStyle = "#f43f5e";
+    ctx.beginPath();
+    ctx.arc(iconCenterX, iconCenterY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
-          ctx.save();
-          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-          ctx.shadowBlur = 4;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 1;
-          ctx.fillStyle = "#ffffff";
-          ctx.fillText(watermarkText, textX, textY);
-          ctx.restore();
+    // Texto de la marca de agua
+    const textX = iconCenterX + iconRadius + Math.round(fontSize * 0.5);
+    const textY = badgeY + badgeHeight / 2 + 1;
 
-          // 4. Exportar el archivo con la marca de agua integrada
-          const outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                resolve(file);
-                return;
-              }
-              const watermarkedFile = new File([blob], file.name, {
-                type: outputType,
-                lastModified: Date.now(),
-              });
-              resolve(watermarkedFile);
-            },
-            outputType,
-            quality
-          );
-        } catch (err) {
-          console.error("Error al aplicar marca de agua a imagen:", err);
-          resolve(file);
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(watermarkText, textX, textY);
+    ctx.restore();
+
+    // 4. Exportar el archivo con la marca de agua integrada
+    let outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
+    let blob = await canvasToBlob(canvas, outputType, quality);
+
+    // Si un PNG resulta muy pesado (> 3.5 MB, común en capturas de pantalla), convertir a JPEG de alta calidad
+    if (blob && outputType === "image/png" && blob.size > 3.5 * 1024 * 1024) {
+      const jpegBlob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (jpegBlob && jpegBlob.size < blob.size) {
+        blob = jpegBlob;
+        outputType = "image/jpeg";
+      }
+    }
+
+    if (!blob) {
+      return file;
+    }
+
+    const finalExt = outputType === "image/png" ? "png" : "jpg";
+    const finalName = replaceFileExtension(file.name, finalExt);
+    return new File([blob], finalName, {
+      type: outputType,
+      lastModified: Date.now(),
+    });
+  } catch (err) {
+    console.error("Error al aplicar marca de agua a imagen:", err);
+    return file;
+  }
+}
+
+/**
+ * Reduce progresivamente peso/resolución de una imagen cuando se usa respaldo por servidor
+ * preservando su orientación y marca de agua ya estampada.
+ */
+export async function compressImageFileForFallback(
+  file: File,
+  maxBytes = 3.8 * 1024 * 1024
+): Promise<File | null> {
+  if (!file.type.startsWith("image/")) return null;
+  if (file.size <= maxBytes) return file;
+
+  try {
+    const img = await loadImageFromFile(file);
+    let width = img.naturalWidth || img.width;
+    let height = img.naturalHeight || img.height;
+    if (!width || !height) return null;
+
+    const maxEdge = 1920;
+    if (Math.max(width, height) > maxEdge) {
+      const ratio = maxEdge / Math.max(width, height);
+      width = Math.max(1, Math.round(width * ratio));
+      height = Math.max(1, Math.round(height * ratio));
+    }
+
+    for (const scaleFactor of [1, 0.8, 0.65]) {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scaleFactor));
+      canvas.height = Math.max(1, Math.round(height * scaleFactor));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      for (const q of [0.88, 0.76, 0.65]) {
+        const blob = await canvasToBlob(canvas, "image/jpeg", q);
+        if (blob && blob.size <= maxBytes) {
+          return new File([blob], replaceFileExtension(file.name, "jpg"), {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+          });
         }
-      };
-
-      img.onerror = () => resolve(file);
-      img.src = e.target?.result as string;
-    };
-
-    reader.onerror = () => resolve(file);
-    reader.readAsDataURL(file);
-  });
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function drawRoundedRect(

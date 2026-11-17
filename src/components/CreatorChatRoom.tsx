@@ -34,6 +34,7 @@ import {
 import UserLevelBadge from "@/components/UserLevelBadge";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import { watermarkImageFile } from "@/lib/watermarkClient";
+import { uploadFileToR2 } from "@/lib/uploadClient";
 
 const CHAT_EMOJIS = ["🔥", "💋", "✨", "❤️", "😍", "😈", "👑", "📸", "💎", "🥂"];
 
@@ -366,35 +367,13 @@ export default function CreatorChatRoom({
         }
 
         setUploadStatus(`Subiendo archivo ${i + 1} de ${attachments.length}...`);
-        const presignedRes = await fetch("/api/uploads/presigned", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type,
-            sizeBytes: file.size,
-            category: "chat",
-          }),
-        });
-        const presignedData = await presignedRes.json();
-        if (!presignedData.success) {
-          throw new Error(presignedData.error || "Error al preparar subida.");
-        }
-
-        const putRes = await fetch(presignedData.uploadUrl, {
-          method: "PUT",
-          body: file,
-          headers: { "Content-Type": file.type },
-        });
-        if (!putRes.ok) {
-          throw new Error("Error al subir archivo multimedia a R2.");
-        }
+        const uploaded = await uploadFileToR2(file, "chat");
 
         uploadedMedia.push({
-          mediaKey: presignedData.key,
+          mediaKey: uploaded.key,
           mediaType: att.mediaType,
-          mimeType: file.type,
-          sizeBytes: file.size,
+          mimeType: uploaded.mimeType,
+          sizeBytes: uploaded.sizeBytes,
         });
       }
 

@@ -215,10 +215,19 @@ export default function MediaCaptureModal({
   const handleConfirm = () => {
     if (!capturedPreview) return;
 
-    const extension = capturedPreview.type === "photo" ? "jpg" : "mp4";
+    const rawType =
+      capturedPreview.blob.type ||
+      (capturedPreview.type === "photo" ? "image/jpeg" : "video/mp4");
+    const baseMime = rawType.split(";")[0].trim() || (capturedPreview.type === "photo" ? "image/jpeg" : "video/mp4");
+    const extension =
+      capturedPreview.type === "photo"
+        ? "jpg"
+        : baseMime.includes("webm")
+        ? "webm"
+        : "mp4";
     const filename = `camera_${Date.now()}.${extension}`;
     const file = new File([capturedPreview.blob], filename, {
-      type: capturedPreview.blob.type || (capturedPreview.type === "photo" ? "image/jpeg" : "video/mp4"),
+      type: baseMime,
     });
 
     onCapture(file);

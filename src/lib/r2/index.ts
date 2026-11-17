@@ -13,24 +13,37 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
  * - Bucket de medios: 'kontenido-media'
  * - Bucket privado: 'kontenido-private'
  */
+const rawEndpoint = process.env.R2_ENDPOINT?.trim().replace(/\/+$/, "");
+const rawAccountId = process.env.R2_ACCOUNT_ID?.trim();
 const endpoint =
-  process.env.R2_ENDPOINT ||
-  (process.env.R2_ACCOUNT_ID
-    ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
-    : undefined);
+  rawEndpoint ||
+  (rawAccountId ? `https://${rawAccountId}.r2.cloudflarestorage.com` : undefined);
+
+const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim() || "";
+const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim() || "";
+
+export function isR2Configured(): boolean {
+  return Boolean(endpoint && accessKeyId && secretAccessKey);
+}
 
 export const s3Client = new S3Client({
   region: "auto",
   endpoint,
   credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+    accessKeyId,
+    secretAccessKey,
   },
+  // Evita que @aws-sdk/client-s3 >= 3.729 inyecte parámetros CRC32 en URLs prefirmadas PUT de R2
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 export const BUCKETS = {
-  MEDIA: process.env.R2_BUCKET || "kontenido",
-  PRIVATE: process.env.R2_BUCKET_PRIVATE || process.env.R2_BUCKET || "kontenido",
+  MEDIA: process.env.R2_BUCKET?.trim() || "kontenido",
+  PRIVATE:
+    process.env.R2_BUCKET_PRIVATE?.trim() ||
+    process.env.R2_BUCKET?.trim() ||
+    "kontenido",
 };
 
 /**
