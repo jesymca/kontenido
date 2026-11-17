@@ -22,7 +22,7 @@ import { createPostAction } from "@/actions/creator";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
 import { watermarkImageFile } from "@/lib/watermarkClient";
-import { uploadFileToR2, resolveClientMimeType } from "@/lib/uploadClient";
+import { uploadFileToR2, resolveClientMimeType, cloneFileIntoMemory } from "@/lib/uploadClient";
 import MediaWatermark from "@/components/MediaWatermark";
 
 const QUICK_EMOJIS = ["🔥", "💋", "✨", "👑", "📸", "🌴", "💖", "😍", "😈", "🥂", "💎", "⭐", "🎉", "👀"];
@@ -70,9 +70,13 @@ export default function SocialPostComposer({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selected = Array.from(e.target.files);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.target;
+    if (inputEl.files && inputEl.files.length > 0) {
+      const rawSelected = Array.from(inputEl.files);
+      const selected = await Promise.all(rawSelected.map((f) => cloneFileIntoMemory(f)));
+      inputEl.value = "";
+
       setFiles((prev) => [...prev, ...selected]);
 
       const newPreviews = selected.map((f) => {
@@ -84,7 +88,6 @@ export default function SocialPostComposer({
         };
       });
       setFilePreviews((prev) => [...prev, ...newPreviews]);
-      e.target.value = "";
     }
   };
 

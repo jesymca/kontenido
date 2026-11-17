@@ -33,7 +33,7 @@ import {
   type LikeQuotaInfo,
 } from "@/actions/komestible";
 import { COUNTRIES, USER_GENDERS } from "@/lib/countries";
-import { uploadFileToR2 } from "@/lib/uploadClient";
+import { uploadFileToR2, cloneFileIntoMemory } from "@/lib/uploadClient";
 
 export interface MyKomestiblePhotoItem {
   id: string;
@@ -583,10 +583,13 @@ export default function KomestibleHub({
                   accept="image/jpeg,image/png,image/webp"
                   className="hidden"
                   disabled={uploading || myPhotos.length >= config.maxPhotosPerUser}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handlePhotoUpload(f);
-                    e.target.value = "";
+                  onChange={async (e) => {
+                    const inputEl = e.target;
+                    const rawFile = inputEl.files?.[0];
+                    if (!rawFile) return;
+                    const cloned = await cloneFileIntoMemory(rawFile);
+                    inputEl.value = "";
+                    handlePhotoUpload(cloned);
                   }}
                 />
               </label>

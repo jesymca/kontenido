@@ -34,7 +34,7 @@ import {
 import UserLevelBadge from "@/components/UserLevelBadge";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import { watermarkImageFile } from "@/lib/watermarkClient";
-import { uploadFileToR2 } from "@/lib/uploadClient";
+import { uploadFileToR2, cloneFileIntoMemory, resolveClientMimeType } from "@/lib/uploadClient";
 
 const CHAT_EMOJIS = ["🔥", "💋", "✨", "❤️", "😍", "😈", "👑", "📸", "💎", "🥂"];
 
@@ -232,14 +232,20 @@ export default function CreatorChatRoom({
     }
   };
 
-  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files || []);
-    if (picked.length === 0) return;
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawPicked = Array.from(e.target.files || []);
+    if (rawPicked.length === 0) return;
+
+    const picked = await Promise.all(rawPicked.map((f) => cloneFileIntoMemory(f)));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
 
     const newItems: PendingAttachment[] = [];
     for (const file of picked) {
-      const isImg = file.type.startsWith("image/");
-      const isVid = file.type.startsWith("video/");
+      const mime = resolveClientMimeType(file);
+      const isImg = mime.startsWith("image/");
+      const isVid = mime.startsWith("video/");
       if (!isImg && !isVid) continue;
       newItems.push({
         id: crypto.randomUUID(),
@@ -258,10 +264,6 @@ export default function CreatorChatRoom({
       }
       return merged;
     });
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
   };
 
   const removeAttachment = (id: string) => {

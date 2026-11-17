@@ -17,7 +17,7 @@ export interface WatermarkOptions {
   includeDiagonal?: boolean; // True por defecto
 }
 
-const MAX_CANVAS_DIMENSION = 2560;
+const MAX_CANVAS_DIMENSION = 1920;
 
 function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -68,7 +68,7 @@ export async function watermarkImageFile(
 
   const domain = options.domain || "https://www.kontenido.online";
   const watermarkText = `${domain}/${username.replace(/^@/, "")}`;
-  const quality = options.quality ?? 0.92;
+  const quality = options.quality ?? 0.88;
   const position = options.position || "bottom-right";
   const includeDiagonal = options.includeDiagonal !== false;
 
@@ -202,8 +202,8 @@ export async function watermarkImageFile(
     let outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
     let blob = await canvasToBlob(canvas, outputType, quality);
 
-    // Si un PNG resulta muy pesado (> 3.5 MB, común en capturas de pantalla), convertir a JPEG de alta calidad
-    if (blob && outputType === "image/png" && blob.size > 3.5 * 1024 * 1024) {
+    // Si un PNG resulta pesado (> 1.5 MB, común en capturas de pantalla), convertir a JPEG de alta calidad
+    if (blob && outputType === "image/png" && blob.size > 1.5 * 1024 * 1024) {
       const jpegBlob = await canvasToBlob(canvas, "image/jpeg", quality);
       if (jpegBlob && jpegBlob.size < blob.size) {
         blob = jpegBlob;
@@ -224,54 +224,6 @@ export async function watermarkImageFile(
   } catch (err) {
     console.error("Error al aplicar marca de agua a imagen:", err);
     return file;
-  }
-}
-
-/**
- * Reduce progresivamente peso/resolución de una imagen cuando se usa respaldo por servidor
- * preservando su orientación y marca de agua ya estampada.
- */
-export async function compressImageFileForFallback(
-  file: File,
-  maxBytes = 3.8 * 1024 * 1024
-): Promise<File | null> {
-  if (!file.type.startsWith("image/")) return null;
-  if (file.size <= maxBytes) return file;
-
-  try {
-    const img = await loadImageFromFile(file);
-    let width = img.naturalWidth || img.width;
-    let height = img.naturalHeight || img.height;
-    if (!width || !height) return null;
-
-    const maxEdge = 1920;
-    if (Math.max(width, height) > maxEdge) {
-      const ratio = maxEdge / Math.max(width, height);
-      width = Math.max(1, Math.round(width * ratio));
-      height = Math.max(1, Math.round(height * ratio));
-    }
-
-    for (const scaleFactor of [1, 0.8, 0.65]) {
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(width * scaleFactor));
-      canvas.height = Math.max(1, Math.round(height * scaleFactor));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      for (const q of [0.88, 0.76, 0.65]) {
-        const blob = await canvasToBlob(canvas, "image/jpeg", q);
-        if (blob && blob.size <= maxBytes) {
-          return new File([blob], replaceFileExtension(file.name, "jpg"), {
-            type: "image/jpeg",
-            lastModified: Date.now(),
-          });
-        }
-      }
-    }
-    return null;
-  } catch {
-    return null;
   }
 }
 

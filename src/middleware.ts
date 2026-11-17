@@ -78,8 +78,8 @@ export default auth((req) => {
 export const config = {
   matcher: [
     /*
-     * Aplica a todas las rutas excepto archivos estáticos como favicon, png, svg, etc.
+     * Aplica a todas las rutas de páginas excepto /api/* y archivos estáticos como favicon, png, svg, etc.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
