@@ -133,6 +133,8 @@ export async function updateAgencySettingsAction(formData: FormData) {
     .where(eq(agencies.id, agency.id));
 
   revalidatePath("/agencia");
+  revalidatePath("/");
+  revalidatePath("/[username]", "page");
   revalidatePath("/", "layout");
 
   return { success: true };

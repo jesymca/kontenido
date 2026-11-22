@@ -12,7 +12,7 @@ import {
 import { ensureChatSchema } from "@/lib/db/initChat";
 import { ensureInteractionsSchema } from "@/lib/db/initInteractions";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
-import { CREATOR_CATEGORIES, getCreatorCategoryMeta } from "@/lib/creatorCategories";
+import { CREATOR_CATEGORIES, getCreatorCategoryMeta, getAgencyBadgeStyle } from "@/lib/creatorCategories";
 import { getCountryMeta, normalizeGenderValue } from "@/lib/countries";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
@@ -227,6 +227,7 @@ function CreatorDirectoryCard({
           </span>
           {creator.agencyBadgeText && (
             <span
+              style={getAgencyBadgeStyle(creator.agencyBadgeColor)}
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${
                 creator.agencyBadgeColor ||
                 "from-indigo-500 via-purple-500 to-rose-500"

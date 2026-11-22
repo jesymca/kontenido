@@ -17,7 +17,7 @@ import {
 } from "@/lib/db/schema";
 import { ensureChatSchema } from "@/lib/db/initChat";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
-import { getCreatorCategoryMeta } from "@/lib/creatorCategories";
+import { getCreatorCategoryMeta, getAgencyBadgeStyle } from "@/lib/creatorCategories";
 import { getCountryMeta, isVenezuelanUser } from "@/lib/countries";
 import { eq, and, desc, gt } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
@@ -344,6 +344,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
                   </span>
                   {activeAgency && (
                     <span
+                      style={getAgencyBadgeStyle(activeAgency.badgeColor)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${activeAgency.badgeColor} shadow-lg`}
                     >
                       <Building2 className="w-3.5 h-3.5" />

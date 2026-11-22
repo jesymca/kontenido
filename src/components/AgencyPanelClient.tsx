@@ -28,6 +28,7 @@ import {
   CREATOR_CATEGORIES,
   AGENCY_BADGE_GRADIENTS,
   getCreatorCategoryMeta,
+  getAgencyBadgeStyle,
 } from "@/lib/creatorCategories";
 
 export interface AgencyCreatorItem {
@@ -155,6 +156,7 @@ export default function AgencyPanelClient({ agency, creators }: Props) {
           <div className="mt-3 flex items-center gap-2 flex-wrap">
             {showBadge ? (
               <span
+                style={getAgencyBadgeStyle(badgeColor)}
                 className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${badgeColor} shadow-md`}
               >
                 <Award className="w-3 h-3" />
@@ -308,10 +310,11 @@ export default function AgencyPanelClient({ agency, creators }: Props) {
                   key={g.id}
                   type="button"
                   onClick={() => setBadgeColor(g.gradient)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r ${g.gradient} transition ${
+                  style={{ backgroundImage: g.cssGradient }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r ${g.gradient} transition cursor-pointer ${
                     badgeColor === g.gradient
                       ? "ring-2 ring-white scale-105 shadow-lg"
-                      : "opacity-75 hover:opacity-100"
+                      : "opacity-80 hover:opacity-100"
                   }`}
                 >
                   {g.label}
@@ -334,7 +337,10 @@ export default function AgencyPanelClient({ agency, creators }: Props) {
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-slate-400">Vista previa:</span>
               <span
-                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${badgeColor} shadow-lg`}
+                style={getAgencyBadgeStyle(badgeColor)}
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${badgeColor} shadow-lg ${
+                  !showBadge ? "opacity-40 line-through" : ""
+                }`}
               >
                 <Building2 className="w-3 h-3" />
                 {badgeText || agencyName}

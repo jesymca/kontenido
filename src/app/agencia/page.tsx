@@ -167,6 +167,7 @@ export default async function AgenciaPage({ searchParams }: PageProps) {
 
       {agency ? (
         <AgencyPanelClient
+          key={agency.id}
           agency={{
             id: agency.id,
             name: agency.name,
