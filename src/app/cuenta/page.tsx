@@ -6,16 +6,17 @@ import {
   settings,
   userLevels,
   vipMemberships,
-  subscriptions,
-  users,
+  profiles,
 } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
 import WalletTopupForm from "@/components/WalletTopupForm";
 import BuyVipButton from "@/components/BuyVipButton";
 import AccountModeCard from "@/components/AccountModeCard";
+import BasicProfileCard from "@/components/BasicProfileCard";
 import { cn, getVipBadgeClass } from "@/lib/utils";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { getCurrentDbUser } from "@/lib/session";
 import { isVenezuelanUser, getCountryMeta } from "@/lib/countries";
 import Link from "next/link";
 import {
@@ -33,31 +34,47 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+interface CuentaPageProps {
+  searchParams?: Promise<{ completar?: string }>;
+}
+
 /**
  * Vista de Billetera y Cuenta de Usuario (/cuenta)
- * Gestiona recargas USDT, saldo KOIN, nivel del usuario (0 al 100) y membresías VIP.
+ * Gestiona perfil básico + preferencias KOMESTIBLE, recargas USDT, saldo KOIN, nivel del usuario (0 al 100) y membresías VIP.
  */
-export default async function CuentaPage() {
+export default async function CuentaPage({ searchParams }: CuentaPageProps) {
   await ensureKomestibleSchema();
-  const session = await auth();
+  const [session, resolvedSearch] = await Promise.all([
+    auth(),
+    searchParams ? searchParams : Promise.resolve({} as { completar?: string }),
+  ]);
   if (!session?.user) return null;
 
   const userId = session.user.id;
 
-  // 1. Obtener usuario actualizado
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+  // Ejecutar TODAS las consultas de BD en paralelo para navegación instantánea
+  const [user, userProfile, wallet, allSettings, transactions, memberships, allLevels] =
+    await Promise.all([
+      getCurrentDbUser(),
+      db.query.profiles.findFirst({ where: eq(profiles.userId, userId) }),
+      db.query.wallets.findFirst({ where: eq(wallets.userId, userId) }),
+      db.query.settings.findMany(),
+      db.query.walletTransactions.findMany({
+        where: eq(walletTransactions.userId, userId),
+        orderBy: [desc(walletTransactions.createdAt)],
+        limit: 20,
+      }),
+      db.query.vipMemberships.findMany({
+        where: eq(vipMemberships.isActive, 1),
+      }),
+      db.query.userLevels.findMany({
+        orderBy: (ul, { asc }) => [asc(ul.levelNumber)],
+      }),
+    ]);
+
   const isVenezuela = isVenezuelanUser(user?.country);
   const countryMeta = getCountryMeta(user?.country);
 
-  // 2. Obtener billetera
-  const wallet = await db.query.wallets.findFirst({
-    where: eq(wallets.userId, userId),
-  });
-
-  // 3. Obtener direcciones USDT y Binance Pay ID configuradas por SUPER_ADMIN
-  const allSettings = await db.query.settings.findMany();
   const trc20 =
     allSettings.find((s) => s.key === "usdt_trc20_address")?.value ||
     "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb";
@@ -67,22 +84,6 @@ export default async function CuentaPage() {
   const binancePayId =
     allSettings.find((s) => s.key === "binance_pay_id")?.value || null;
 
-  // 4. Obtener transacciones del usuario
-  const transactions = await db.query.walletTransactions.findMany({
-    where: eq(walletTransactions.userId, userId),
-    orderBy: [desc(walletTransactions.createdAt)],
-    limit: 20,
-  });
-
-  // 5. Obtener membresías VIP activas
-  const memberships = await db.query.vipMemberships.findMany({
-    where: eq(vipMemberships.isActive, 1),
-  });
-
-  // 6. Obtener todos los niveles sincronizados con SUPER_ADMIN (/admin/niveles)
-  const allLevels = await db.query.userLevels.findMany({
-    orderBy: (ul, { asc }) => [asc(ul.levelNumber)],
-  });
   const currentLevelNum = user?.level || 0;
   const currentLevel =
     allLevels.find((l) => l.levelNumber === currentLevelNum) ||
@@ -95,6 +96,19 @@ export default async function CuentaPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
+      {/* Información Básica del Perfil + Preferencias de KOMESTIBLE (Hombre/Mujer/Pareja/Transgénero) */}
+      {(user?.role || session.user.role) !== "AGENCY" && (
+        <BasicProfileCard
+          username={user?.username || session.user.username}
+          initialDisplayName={userProfile?.displayName || user?.username || session.user.username}
+          initialBio={userProfile?.bio || ""}
+          initialCountry={user?.country || "VE"}
+          initialGender={user?.gender || null}
+          initialInterestedIn={user?.interestedIn || null}
+          forceOpen={resolvedSearch?.completar === "1"}
+        />
+      )}
+
       {/* Tarjeta explicativa y selector bidireccional Vender vs Consumir */}
       <AccountModeCard
         currentRole={user?.role || session.user.role}

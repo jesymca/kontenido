@@ -33,6 +33,7 @@ export async function getDolarRates(fallbackRate = DEFAULT_PARALELO_FALLBACK): P
   try {
     const res = await fetch("https://ve.dolarapi.com/v1/dolares/", {
       next: { revalidate: 180 }, // Revalida cada 3 minutos
+      signal: AbortSignal.timeout(2500),
       headers: {
         Accept: "application/json",
       },
@@ -58,6 +59,7 @@ export async function getDolarRates(fallbackRate = DEFAULT_PARALELO_FALLBACK): P
     try {
       const directRes = await fetch("https://ve.dolarapi.com/v1/dolares/paralelo", {
         next: { revalidate: 180 },
+        signal: AbortSignal.timeout(2000),
       });
       if (directRes.ok) {
         const item = (await directRes.json()) as DolarItem;

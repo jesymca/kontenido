@@ -17,24 +17,24 @@ export default async function AdminUsuariosPage() {
   let loadError: string | null = null;
 
   try {
-    await ensureInteractionsSchema();
-    await ensureKomestibleSchema();
+    await Promise.all([ensureInteractionsSchema(), ensureKomestibleSchema()]);
 
-    allUsers = await db.query.users.findMany({
-      orderBy: [desc(users.createdAt)],
-      with: {
-        profile: true,
-        posts: {
-          where: (p, { eq }) => eq(p.isDeleted, 0),
-          orderBy: (p, { desc }) => [desc(p.createdAt)],
-          with: {
-            media: true,
+    [allUsers, memberships] = await Promise.all([
+      db.query.users.findMany({
+        orderBy: [desc(users.createdAt)],
+        with: {
+          profile: true,
+          posts: {
+            where: (p, { eq }) => eq(p.isDeleted, 0),
+            orderBy: (p, { desc }) => [desc(p.createdAt)],
+            with: {
+              media: true,
+            },
           },
         },
-      },
-    });
-
-    memberships = await db.query.vipMemberships.findMany();
+      }),
+      db.query.vipMemberships.findMany(),
+    ]);
   } catch (err: any) {
     console.error("Error cargando usuarios en /admin/usuarios:", err);
     loadError = err?.message || "Ocurrió un error al consultar la base de datos.";

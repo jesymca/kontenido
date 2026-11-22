@@ -30,7 +30,9 @@ const RESERVED_REGISTER_USERNAMES = new Set([
   "koinciden",
 ]);
 
-const validGenderEnum = z.enum(["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"]);
+import { normalizeGenderValue } from "@/lib/countries";
+
+const validGenderEnum = z.enum(["HOMBRE", "MUJER", "PAREJA", "TRANSGENERO", "TRANSEXUAL", "OTRO"]);
 
 /**
  * Esquema de validación para registro de CREADOR
@@ -45,7 +47,7 @@ const registerCreatorSchema = z.object({
   email: z.string().email("Ingresa un correo electrónico válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
   country: z.string().min(2).max(10).default("VE"),
-  gender: validGenderEnum.default("MUJER"),
+  gender: validGenderEnum.nullable().optional(),
   birthDate: z.string().refine((val) => {
     const birth = new Date(val);
     const today = new Date();
@@ -68,7 +70,7 @@ const registerConsumerSchema = z.object({
   email: z.string().email("Ingresa un correo electrónico válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
   country: z.string().min(2).max(10).default("VE"),
-  gender: validGenderEnum.default("HOMBRE"),
+  gender: validGenderEnum.nullable().optional(),
   birthDate: z.string().optional(),
 });
 
@@ -76,15 +78,15 @@ const registerConsumerSchema = z.object({
  * Registrar una nueva cuenta de CREADOR
  */
 export async function registerCreatorAction(formData: FormData) {
-  await ensureChatSchema();
-  await ensureKomestibleSchema();
+  await Promise.all([ensureChatSchema(), ensureKomestibleSchema()]);
 
+  const rawGender = normalizeGenderValue(formData.get("gender") as string | null);
   const raw = {
     username: (formData.get("username") as string)?.toLowerCase().trim(),
     email: (formData.get("email") as string)?.toLowerCase().trim(),
     password: formData.get("password") as string,
     country: ((formData.get("country") as string) || "VE").toUpperCase().trim(),
-    gender: ((formData.get("gender") as string) || "MUJER").toUpperCase().trim(),
+    gender: rawGender,
     birthDate: formData.get("birthDate") as string,
   };
 
@@ -113,7 +115,7 @@ export async function registerCreatorAction(formData: FormData) {
   const userId = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  // Crear usuario con rol CREATOR y estado PENDING (requiere KYC y contrato)
+  // Crear usuario con rol CREATOR y estado PENDING (la identidad e intereses se completan en perfil básico)
   await db.insert(users).values({
     id: userId,
     username,
@@ -124,16 +126,15 @@ export async function registerCreatorAction(formData: FormData) {
     kycStatus: "NONE",
     birthDate,
     country,
-    gender,
+    gender: gender ?? null,
+    interestedIn: null,
     level: 0,
     allowDownload: 0,
     createdAt: now,
     updatedAt: now,
   });
 
-  const creatorCat = ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"].includes(gender)
-    ? (gender as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
-    : "MUJER";
+  const creatorCat = normalizeGenderValue(gender) || "MUJER";
 
   await db.insert(profiles).values({
     userId,
@@ -161,15 +162,15 @@ export async function registerCreatorAction(formData: FormData) {
  * Registrar una nueva cuenta de CONSUMIDOR
  */
 export async function registerConsumerAction(formData: FormData) {
-  await ensureChatSchema();
-  await ensureKomestibleSchema();
+  await Promise.all([ensureChatSchema(), ensureKomestibleSchema()]);
 
+  const rawGender = normalizeGenderValue(formData.get("gender") as string | null);
   const raw = {
     username: (formData.get("username") as string)?.toLowerCase().trim(),
     email: (formData.get("email") as string)?.toLowerCase().trim(),
     password: formData.get("password") as string,
     country: ((formData.get("country") as string) || "VE").toUpperCase().trim(),
-    gender: ((formData.get("gender") as string) || "HOMBRE").toUpperCase().trim(),
+    gender: rawGender,
     birthDate: (formData.get("birthDate") as string) || undefined,
   };
 
@@ -197,7 +198,7 @@ export async function registerConsumerAction(formData: FormData) {
   const userId = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  // Crear usuario con rol CONSUMER y estado ACTIVE
+  // Crear usuario con rol CONSUMER y estado ACTIVE (la identidad e intereses se completan en perfil básico)
   await db.insert(users).values({
     id: userId,
     username,
@@ -208,7 +209,8 @@ export async function registerConsumerAction(formData: FormData) {
     kycStatus: "NONE",
     birthDate: birthDate || null,
     country,
-    gender,
+    gender: gender ?? null,
+    interestedIn: null,
     level: 0,
     allowDownload: 0,
     createdAt: now,

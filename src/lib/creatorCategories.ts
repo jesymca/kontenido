@@ -1,7 +1,14 @@
-export type CreatorCategoryValue = "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL";
+import { normalizeGenderValue } from "@/lib/countries";
+
+export type CreatorCategoryValue =
+  | "HOMBRE"
+  | "MUJER"
+  | "PAREJA"
+  | "TRANSGENERO"
+  | "TRANSEXUAL";
 
 export const CREATOR_CATEGORIES: Array<{
-  value: CreatorCategoryValue;
+  value: "HOMBRE" | "MUJER" | "PAREJA" | "TRANSGENERO";
   label: string;
   plural: string;
   badgeClass: string;
@@ -25,16 +32,17 @@ export const CREATOR_CATEGORIES: Array<{
     badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   },
   {
-    value: "TRANSEXUAL",
-    label: "Transexual",
-    plural: "Transexuales",
+    value: "TRANSGENERO",
+    label: "Transgénero",
+    plural: "Transgéneros",
     badgeClass: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30",
   },
 ];
 
 export function getCreatorCategoryMeta(value?: string | null) {
+  const normalized = normalizeGenderValue(value);
   return (
-    CREATOR_CATEGORIES.find((c) => c.value === value) || CREATOR_CATEGORIES[0]
+    CREATOR_CATEGORIES.find((c) => c.value === normalized) || CREATOR_CATEGORIES[0]
   );
 }
 

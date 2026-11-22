@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -38,6 +39,11 @@ export default function CreatorPanelNav({
   isVenezuela = true,
 }: Props) {
   const pathname = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   // Si se invoca desde el interior de una página individual, no duplicar ya que está fijo en el Navbar global
   if (!inHeader) {
@@ -130,14 +136,19 @@ export default function CreatorPanelNav({
             </span>
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = item.exact
+              const isCurrent = item.exact
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
+              const isActive = pendingHref ? pendingHref === item.href : isCurrent;
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
+                  onClick={() => {
+                    if (!isCurrent) setPendingHref(item.href);
+                  }}
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all select-none",
                     item.highlight && !isActive

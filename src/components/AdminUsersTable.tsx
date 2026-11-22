@@ -4,7 +4,7 @@ import { useState } from "react";
 import UserLevelBadge from "./UserLevelBadge";
 import { updateAdminUserAction, toggleUserSuspensionAction } from "@/actions/admin";
 import CreatorContentModal, { CreatorPostModalItem } from "./CreatorContentModal";
-import { COUNTRIES, USER_GENDERS, getCountryMeta } from "@/lib/countries";
+import { COUNTRIES, USER_GENDERS, getCountryMeta, normalizeGenderValue } from "@/lib/countries";
 import {
   Edit2,
   ShieldAlert,
@@ -469,7 +469,7 @@ export default function AdminUsersTable({ users, memberships }: Props) {
                   <label className="block text-xs font-semibold text-slate-300 mb-1">Género</label>
                   <select
                     name="gender"
-                    defaultValue={editingUser.gender || ""}
+                    defaultValue={normalizeGenderValue(editingUser.gender) || ""}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white"
                   >
                     <option value="">Sin especificar</option>

@@ -13,6 +13,7 @@ import { ensureChatSchema } from "@/lib/db/initChat";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { normalizeGenderValue } from "@/lib/countries";
 
 const RESERVED_USERNAMES = new Set([
   "admin",
@@ -148,10 +149,7 @@ export async function createAgencyCreatorAction(formData: FormData) {
     .replace(/[^a-z0-9_]/g, "");
   const bio = (formData.get("bio") as string)?.trim();
   const rawCategory = (formData.get("creatorCategory") as string) || "MUJER";
-  const validCategories = ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"] as const;
-  const creatorCategory = validCategories.includes(rawCategory as any)
-    ? (rawCategory as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
-    : "MUJER";
+  const creatorCategory = normalizeGenderValue(rawCategory) || "MUJER";
   const subscriptionPriceKoin = parseFloat(
     (formData.get("subscriptionPriceKoin") as string) || "10"
   ) || 10.0;

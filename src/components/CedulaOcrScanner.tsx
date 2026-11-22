@@ -54,6 +54,14 @@ export default function CedulaOcrScanner({
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrStatusText, setOcrStatusText] = useState("");
   const [extractedData, setExtractedData] = useState<ParsedVenezuelanId | null>(null);
+  const [ocrMeta, setOcrMeta] = useState<{
+    birthDateIso: string;
+    idNumber: string;
+    confidence: number;
+    markersCount: number;
+    mrzValid: boolean;
+    birthDateSource: string;
+  } | null>(null);
 
   // Formulario editable
   const [idNumber, setIdNumber] = useState("");
@@ -64,7 +72,10 @@ export default function CedulaOcrScanner({
   // Estados de envío
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<{
+    autoApproved: boolean;
+    summary?: string;
+  } | null>(null);
 
   // Estados de captura de cámara (trasera vs selfie)
   const [cameraModalData, setCameraModalData] = useState<{
@@ -111,11 +122,68 @@ export default function CedulaOcrScanner({
     await runClientOcr(file);
   };
 
-  // Motor OCR Client-side inspirado en jesymca/reconocimiento_cedula
+  // Preprocesa la imagen en canvas (escala de grises + mejora de contraste) para segundo intento OCR
+  const createEnhancedImageBlob = (file: File): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          URL.revokeObjectURL(url);
+          const maxSide = 1600;
+          const minSide = 900;
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
+          if (!w || !h) return resolve(null);
+
+          const scale =
+            Math.max(w, h) > maxSide
+              ? maxSide / Math.max(w, h)
+              : Math.max(w, h) < minSide
+              ? minSide / Math.max(w, h)
+              : 1;
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return resolve(null);
+
+          ctx.drawImage(img, 0, 0, w, h);
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const data = imgData.data;
+          const contrast = 1.45;
+          const intercept = 128 * (1 - contrast);
+
+          for (let i = 0; i < data.length; i += 4) {
+            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            const boosted = Math.max(0, Math.min(255, gray * contrast + intercept));
+            data[i] = boosted;
+            data[i + 1] = boosted;
+            data[i + 2] = boosted;
+          }
+          ctx.putImageData(imgData, 0, 0);
+          canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
+        } catch {
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  };
+
+  // Motor OCR Client-side nativo (Tesseract.js + parser Cédula VE / ID / MRZ ICAO)
   const runClientOcr = async (file: File) => {
     setOcrLoading(true);
     setOcrProgress(10);
-    setOcrStatusText("Preparando motor OCR...");
+    setOcrStatusText("Preparando motor OCR nativo...");
+    setOcrMeta(null);
 
     try {
       // Esperar a que Tesseract.js esté disponible
@@ -135,19 +203,78 @@ export default function CedulaOcrScanner({
           if (m.status === "recognizing text") {
             const p = Math.round((m.progress || 0) * 100);
             setOcrProgress(Math.max(20, p));
-            setOcrStatusText(`Reconociendo texto: ${p}%`);
+            setOcrStatusText(`Reconociendo texto y verificando edad: ${p}%`);
           }
         },
       });
 
-      setOcrStatusText("Extrayendo campos (Cédula, Nombres, Fecha)...");
-      const ret = await worker.recognize(file);
-      const text = ret.data?.text || "";
+      setOcrStatusText("Extrayendo campos (Documento, Nombres, Fecha de Nacimiento)...");
+      const firstPass = await worker.recognize(file);
+      let bestText = firstPass.data?.text || "";
+      let bestConfidence = Number(firstPass.data?.confidence || 0);
+      let parsed = parseVenezuelanId(bestText, documentType);
+
+      // Si el primer intento no detectó fecha de nacimiento o número de documento, intentar con imagen mejorada en alto contraste
+      if (!parsed.birthDateIso || !parsed.cedula) {
+        setOcrStatusText("Optimizando contraste para mejorar lectura...");
+        const enhancedBlob = await createEnhancedImageBlob(file);
+        if (enhancedBlob) {
+          const secondPass = await worker.recognize(enhancedBlob);
+          const secondText = secondPass.data?.text || "";
+          const secondConf = Number(secondPass.data?.confidence || 0);
+          const secondParsed = parseVenezuelanId(secondText, documentType);
+
+          const firstScore =
+            (parsed.mrzValid ? 100 : 0) +
+            (parsed.birthDateIso ? 40 : 0) +
+            (parsed.cedula ? 30 : 0) +
+            (parsed.documentMarkersFound || 0) * 5;
+          const secondScore =
+            (secondParsed.mrzValid ? 100 : 0) +
+            (secondParsed.birthDateIso ? 40 : 0) +
+            (secondParsed.cedula ? 30 : 0) +
+            (secondParsed.documentMarkersFound || 0) * 5;
+
+          if (secondScore > firstScore) {
+            parsed = secondParsed;
+            bestConfidence = Math.max(bestConfidence, secondConf);
+          } else {
+            // Combinar campos faltantes si el segundo intento aportó algo que faltaba
+            if (!parsed.birthDateIso && secondParsed.birthDateIso) {
+              parsed.birthDateIso = secondParsed.birthDateIso;
+              parsed.fechaNacimiento = secondParsed.fechaNacimiento;
+              parsed.age = secondParsed.age;
+              parsed.isAdult = secondParsed.isAdult;
+              parsed.birthDateSource = secondParsed.birthDateSource;
+              parsed.mrzValid = parsed.mrzValid || secondParsed.mrzValid;
+            }
+            if (!parsed.cedula && secondParsed.cedula) {
+              parsed.cedula = secondParsed.cedula;
+              parsed.rawCedula = secondParsed.rawCedula;
+            }
+            if (!parsed.fullName && secondParsed.fullName) {
+              parsed.fullName = secondParsed.fullName;
+            }
+            parsed.documentMarkersFound = Math.max(
+              parsed.documentMarkersFound || 0,
+              secondParsed.documentMarkersFound || 0
+            );
+            bestConfidence = Math.max(bestConfidence, secondConf);
+          }
+        }
+      }
+
       await worker.terminate();
 
-      // Procesar texto mediante el parser especializado
-      const parsed = parseVenezuelanId(text);
       setExtractedData(parsed);
+      setOcrMeta({
+        birthDateIso: parsed.birthDateIso || "",
+        idNumber: parsed.cedula || "",
+        confidence: Math.round(bestConfidence * 10) / 10,
+        markersCount: parsed.documentMarkersFound || 0,
+        mrzValid: Boolean(parsed.mrzValid),
+        birthDateSource: parsed.birthDateSource || "NONE",
+      });
 
       if (parsed.cedula) {
         setIdNumber(parsed.cedula);
@@ -161,7 +288,17 @@ export default function CedulaOcrScanner({
       }
 
       setOcrProgress(100);
-      setOcrStatusText("¡Datos extraídos con éxito! Revisa y ajusta si es necesario.");
+      if (parsed.birthDateIso && parsed.isAdult && parsed.cedula) {
+        setOcrStatusText(
+          `✓ Mayoría de edad detectada automáticamente (${parsed.age} años). Elegible para aprobación instantánea.`
+        );
+      } else if (parsed.birthDateIso && !parsed.isAdult) {
+        setOcrStatusText(
+          `⚠️ El documento indica ${parsed.age} años (menor de 18 años). No elegible.`
+        );
+      } else {
+        setOcrStatusText("Lectura completada. Revisa o completa los campos antes de enviar.");
+      }
     } catch (err: any) {
       console.warn("OCR client-side notice:", err);
       setOcrStatusText("Extracción manual disponible. Ingresa tus datos en los campos a continuación.");
@@ -224,7 +361,7 @@ export default function CedulaOcrScanner({
         fetch(urlsRes.urls.selfie, { method: "PUT", body: selfieFile, headers: { "Content-Type": "image/jpeg" } }),
       ]);
 
-      // 3. Registrar documento en la base de datos
+      // 3. Registrar documento en la base de datos y evaluar aprobación automática (+18)
       const formData = new FormData();
       formData.set("docId", urlsRes.docId);
       formData.set("documentType", documentType);
@@ -235,15 +372,28 @@ export default function CedulaOcrScanner({
       formData.set("fullName", fullName.trim());
       formData.set("birthDate", birthDate);
 
+      if (ocrMeta) {
+        formData.set("ocrBirthDate", ocrMeta.birthDateIso);
+        formData.set("ocrIdNumber", ocrMeta.idNumber);
+        formData.set("ocrConfidence", String(ocrMeta.confidence));
+        formData.set("ocrMarkersCount", String(ocrMeta.markersCount));
+        formData.set("ocrMrzValid", ocrMeta.mrzValid ? "1" : "0");
+        formData.set("ocrBirthDateSource", ocrMeta.birthDateSource);
+      }
+
       const submitRes = await submitKycAction(formData);
       if (submitRes.error) {
         throw new Error(submitRes.error);
       }
 
-      setSuccess(true);
+      setSuccessInfo({
+        autoApproved: Boolean(submitRes.autoApproved),
+        summary: submitRes.summary,
+      });
       setTimeout(() => {
         router.push("/panel/contrato");
-      }, 2000);
+        router.refresh();
+      }, 2200);
     } catch (err: any) {
       setError(err.message || "Ocurrió un error al enviar tu documentación.");
       setSubmitting(false);
@@ -274,13 +424,42 @@ export default function CedulaOcrScanner({
         </div>
       )}
 
-      {success && (
-        <div className="mb-6 p-4 bg-emerald-950/60 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-          <span>
-            ¡Documentación enviada con éxito! Tu cuenta queda en estado{" "}
-            <strong>FALTA VERIFICAR (En revisión por Super Admin)</strong>. Redirigiendo a firma de contrato...
-          </span>
+      {successInfo && (
+        <div
+          className={`mb-6 p-4 rounded-xl text-xs flex items-start gap-2.5 border ${
+            successInfo.autoApproved
+              ? "bg-emerald-950/70 border-emerald-500/50 text-emerald-200"
+              : "bg-amber-950/60 border-amber-500/40 text-amber-200"
+          }`}
+        >
+          <CheckCircle2
+            className={`w-5 h-5 shrink-0 mt-0.5 ${
+              successInfo.autoApproved ? "text-emerald-400" : "text-amber-400"
+            }`}
+          />
+          <div>
+            {successInfo.autoApproved ? (
+              <>
+                <strong className="text-emerald-300 block font-bold mb-0.5">
+                  ¡Identidad y Mayoría de Edad APROBADAS automáticamente! ✓
+                </strong>
+                <span>
+                  El sistema validó directamente tu documento (+18 años) y activó tu estatus a{" "}
+                  <strong className="text-white">APROBADO</strong> al instante. Redirigiendo a firma de contrato...
+                </span>
+              </>
+            ) : (
+              <>
+                <strong className="text-amber-300 block font-bold mb-0.5">
+                  Documentación enviada para revisión manual
+                </strong>
+                <span>
+                  No pudimos confirmar automáticamente todos los campos de la foto, por lo que tu solicitud quedó en{" "}
+                  <strong className="text-white">EN REVISIÓN por Super Admin</strong>. Redirigiendo a firma de contrato...
+                </span>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -426,6 +605,17 @@ export default function CedulaOcrScanner({
                   />
                 </div>
                 <span className="text-[11px] text-slate-400 mt-1 block">{ocrStatusText}</span>
+              </div>
+            )}
+            {!ocrLoading && ocrStatusText && (
+              <div
+                className={`mt-3 px-3 py-2 rounded-xl text-[11px] font-semibold border ${
+                  ocrMeta?.birthDateIso && calculatedAge !== null && calculatedAge >= 18 && ocrMeta.idNumber
+                    ? "bg-emerald-950/50 border-emerald-500/30 text-emerald-300"
+                    : "bg-slate-900 border-slate-800 text-slate-300"
+                }`}
+              >
+                {ocrStatusText}
               </div>
             )}
           </div>
@@ -603,10 +793,12 @@ export default function CedulaOcrScanner({
         {/* Botón de envío */}
         <button
           type="submit"
-          disabled={submitting || success}
+          disabled={submitting || Boolean(successInfo)}
           className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3.5 px-4 rounded-xl transition text-sm shadow-lg shadow-rose-600/30 disabled:opacity-50"
         >
-          {submitting ? "Cifrando y subiendo a R2 Privado..." : "Enviar Validación de Identidad"}
+          {submitting
+            ? "Verificando mayoría de edad y subiendo..."
+            : "Enviar y Validar Mayoría de Edad"}
         </button>
       </form>
 

@@ -7,6 +7,7 @@ const execAsync = promisify(exec);
 /**
  * Utilidades de servidor para MARCA DE AGUA (Watermark) con la URL oficial de la creadora:
  * https://www.kontenido.online/{usuario}
+ * Posicionada discretamente en el borde inferior derecho para no interrumpir la foto.
  */
 
 export interface ServerWatermarkOptions {
@@ -14,8 +15,17 @@ export interface ServerWatermarkOptions {
   includeDiagonal?: boolean;
 }
 
+function escapeXml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 /**
- * Aplica la MARCA DE AGUA sobre una imagen (Buffer) usando Sharp.
+ * Aplica la MARCA DE AGUA discreta en el borde inferior derecho sobre una imagen (Buffer) usando Sharp.
  * REGLA CRÍTICA: Llama siempre a .rotate() para auto-orientar según EXIF
  * garantizando que fotos verticales permanezcan verticales y no se volteen horizontalmente.
  */
@@ -26,7 +36,8 @@ export async function signImageBufferWithSharp(
 ): Promise<Buffer> {
   const domain = options.domain || "https://www.kontenido.online";
   const watermarkText = `${domain}/${username.replace(/^@/, "")}`;
-  const includeDiagonal = options.includeDiagonal !== false;
+  const safeWatermarkText = escapeXml(watermarkText);
+  const includeDiagonal = options.includeDiagonal === true;
 
   // 1. Cargar imagen y auto-orientar según EXIF
   const image = sharp(imageBuffer).rotate();
@@ -35,36 +46,41 @@ export async function signImageBufferWithSharp(
   const width = metadata.width || 1200;
   const height = metadata.height || 800;
 
-  // 2. Calcular tamaño del texto relativo a la menor dimensión
+  // 2. Calcular tamaño compacto relativo a la menor dimensión y acotado al borde inferior derecho
   const minDim = Math.min(width, height);
-  const fontSize = Math.max(16, Math.min(42, Math.round(minDim * 0.028)));
-  const paddingX = Math.round(fontSize * 0.95);
-  const paddingY = Math.round(fontSize * 0.55);
-  const margin = Math.round(minDim * 0.035);
+  const margin = Math.max(8, Math.round(minDim * 0.018));
+  const maxBadgeWidth = Math.max(140, Math.round(width * 0.56));
 
-  const approxCharWidth = fontSize * 0.6;
-  const textWidth = watermarkText.length * approxCharWidth;
-  const badgeWidth = Math.round(textWidth + paddingX * 2 + fontSize * 1.2);
+  let fontSize = Math.max(11, Math.min(26, Math.round(minDim * 0.02)));
+  let paddingX = Math.round(fontSize * 0.72);
+  let badgeWidth = Math.round(watermarkText.length * fontSize * 0.56 + paddingX * 2 + fontSize * 0.9);
+
+  while (badgeWidth > maxBadgeWidth && fontSize > 9) {
+    fontSize -= 1;
+    paddingX = Math.round(fontSize * 0.72);
+    badgeWidth = Math.round(watermarkText.length * fontSize * 0.56 + paddingX * 2 + fontSize * 0.9);
+  }
+
+  const paddingY = Math.round(fontSize * 0.42);
   const badgeHeight = Math.round(fontSize + paddingY * 2);
 
   const badgeX = Math.max(margin, width - badgeWidth - margin);
   const badgeY = Math.max(margin, height - badgeHeight - margin);
 
-  const diagonalFontSize = Math.max(22, Math.min(54, Math.round(minDim * 0.046)));
+  const diagonalFontSize = Math.max(18, Math.min(46, Math.round(minDim * 0.04)));
 
-  // 3. Crear SVG superpuesto con la MARCA DE AGUA (Diagonal en el centro + Sello en la esquina)
+  // 3. Crear SVG superpuesto con la MARCA DE AGUA solo en el borde inferior derecho
   const svgOverlay = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.6"/>
+          <feDropShadow dx="0" dy="1" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5"/>
         </filter>
       </defs>
 
       ${
         includeDiagonal
           ? `
-      <!-- MARCA DE AGUA DIAGONAL EN EL CENTRO -->
       <g transform="translate(${width / 2}, ${height / 2}) rotate(-22)">
         <text
           x="0"
@@ -75,48 +91,46 @@ export async function signImageBufferWithSharp(
           font-size="${diagonalFontSize}px"
           font-weight="900"
           fill="#ffffff"
-          fill-opacity="0.22"
-          stroke="#000000"
-          stroke-width="2"
-          stroke-opacity="0.3"
+          fill-opacity="0.16"
           letter-spacing="2px"
         >
-          ${watermarkText.toUpperCase()}
+          ${safeWatermarkText.toUpperCase()}
         </text>
       </g>
       `
           : ""
       }
 
-      <!-- MARCA DE AGUA TIPO SELLO OFICIAL EN ESQUINA INFERIOR -->
+      <!-- MARCA DE AGUA DISCRETA EN EL BORDE INFERIOR DERECHO -->
       <g filter="url(#shadow)">
-        <rect 
-          x="${badgeX}" 
-          y="${badgeY}" 
-          width="${badgeWidth}" 
-          height="${badgeHeight}" 
-          rx="${Math.round(fontSize * 0.4)}" 
-          fill="#0a0f1e" 
-          fill-opacity="0.84" 
-          stroke="#f43f5e" 
-          stroke-width="1.5" 
-          stroke-opacity="0.6"
+        <rect
+          x="${badgeX}"
+          y="${badgeY}"
+          width="${badgeWidth}"
+          height="${badgeHeight}"
+          rx="${Math.round(fontSize * 0.42)}"
+          fill="#0a0f1e"
+          fill-opacity="0.65"
+          stroke="#ffffff"
+          stroke-width="1"
+          stroke-opacity="0.22"
         />
-        <circle 
-          cx="${badgeX + paddingX + Math.round(fontSize * 0.3)}" 
-          cy="${badgeY + badgeHeight / 2}" 
-          r="${Math.round(fontSize * 0.28)}" 
-          fill="#f43f5e" 
+        <circle
+          cx="${badgeX + paddingX + Math.round(fontSize * 0.25)}"
+          cy="${badgeY + badgeHeight / 2}"
+          r="${Math.max(2.5, Math.round(fontSize * 0.22))}"
+          fill="#f43f5e"
         />
-        <text 
-          x="${badgeX + paddingX + Math.round(fontSize * 0.9)}" 
-          y="${badgeY + badgeHeight / 2 + Math.round(fontSize * 0.35)}" 
-          font-family="system-ui, -apple-system, sans-serif" 
-          font-size="${fontSize}px" 
-          font-weight="bold" 
+        <text
+          x="${badgeX + paddingX + Math.round(fontSize * 0.78)}"
+          y="${badgeY + badgeHeight / 2 + Math.round(fontSize * 0.34)}"
+          font-family="system-ui, -apple-system, sans-serif"
+          font-size="${fontSize}px"
+          font-weight="600"
           fill="#ffffff"
+          fill-opacity="0.92"
         >
-          ${watermarkText}
+          ${safeWatermarkText}
         </text>
       </g>
     </svg>
@@ -134,7 +148,7 @@ export async function signImageBufferWithSharp(
 }
 
 /**
- * Aplica MARCA DE AGUA a un video usando ffmpeg drawtext overlay en el servidor.
+ * Aplica MARCA DE AGUA discreta en el borde inferior derecho a un video usando ffmpeg drawtext.
  * Preserva automáticamente la relación de aspecto y orientación vertical (9:16) u horizontal (16:9).
  */
 export async function signVideoWithFfmpeg(
@@ -145,8 +159,8 @@ export async function signVideoWithFfmpeg(
 ): Promise<void> {
   const watermarkText = `${domain}/${username.replace(/^@/, "")}`.replace(/:/g, "\\:");
 
-  // Filtro drawtext que estampa la marca de agua con sombra y caja de fondo semitransparente
-  const filter = `drawtext=text='${watermarkText}':x=w-tw-25:y=h-th-25:fontsize=h/28:fontcolor=white@0.9:box=1:boxcolor=black@0.65:boxborderw=10:shadowcolor=black@0.7:shadowx=2:shadowy=2`;
+  // Filtro drawtext compacto en la esquina inferior derecha
+  const filter = `drawtext=text='${watermarkText}':x=w-tw-16:y=h-th-16:fontsize=h/36:fontcolor=white@0.88:box=1:boxcolor=black@0.55:boxborderw=8:shadowcolor=black@0.6:shadowx=1:shadowy=1`;
 
   const cmd = `ffmpeg -y -i "${inputFilePath}" -vf "${filter}" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputFilePath}"`;
   await execAsync(cmd);

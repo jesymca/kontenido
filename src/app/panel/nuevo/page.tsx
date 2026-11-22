@@ -1,7 +1,5 @@
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { getCurrentDbUser } from "@/lib/session";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
 import SocialPostComposer from "@/components/SocialPostComposer";
 import { PlusCircle, ArrowLeft } from "lucide-react";
@@ -11,12 +9,8 @@ import Link from "next/link";
  * Pantalla para subir nuevo contenido estilo Red Social (/panel/nuevo)
  */
 export default async function NuevoPostPage() {
-  const session = await auth();
+  const [session, currentUser] = await Promise.all([auth(), getCurrentDbUser()]);
   if (!session?.user) return null;
-
-  const currentUser = await db.query.users.findFirst({
-    where: eq(users.id, session.user.id),
-  });
 
   return (
     <div>

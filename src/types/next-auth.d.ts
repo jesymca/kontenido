@@ -19,6 +19,7 @@ declare module "next-auth" {
       suspensionReason?: string | null;
       country?: string;
       gender?: string | null;
+      interestedIn?: string | null;
     } & DefaultSession["user"];
   }
 
@@ -34,6 +35,7 @@ declare module "next-auth" {
     suspensionReason?: string | null;
     country?: string;
     gender?: string | null;
+    interestedIn?: string | null;
   }
 }
 
@@ -50,5 +52,7 @@ declare module "next-auth/jwt" {
     suspensionReason?: string | null;
     country?: string;
     gender?: string | null;
+    interestedIn?: string | null;
+    syncedAt?: number;
   }
 }

@@ -1,25 +1,11 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import {
-  Shield,
-  Users,
-  Award,
-  Star,
-  Coins,
-  FileCheck,
-  ImageIcon,
-  DollarSign,
-  AlertOctagon,
-  Settings,
-  ChevronRight,
-  Percent,
-  Flame,
-} from "lucide-react";
+import { Shield } from "lucide-react";
+import AdminSidebarNav from "@/components/AdminSidebarNav";
 
 /**
  * Layout principal del panel SUPER_ADMIN (/admin)
- * Navegación completa para el CRUD total de la plataforma
+ * Navegación completa para el CRUD total de la plataforma con feedback instantáneo.
  */
 export default async function AdminLayout({
   children,
@@ -31,21 +17,6 @@ export default async function AdminLayout({
   if (!session?.user || session.user.role !== "SUPER_ADMIN") {
     redirect("/");
   }
-
-  const navLinks = [
-    { href: "/admin", label: "Resumen Global", icon: Shield },
-    { href: "/admin/usuarios", label: "Usuarios y Roles", icon: Users },
-    { href: "/admin/komestible", label: "KOMESTIBLE & KOINCIDEN", icon: Flame },
-    { href: "/admin/comisiones", label: "Comisiones de Creadoras", icon: Percent },
-    { href: "/admin/niveles", label: "Niveles (0 a 100)", icon: Award },
-    { href: "/admin/membresias", label: "Membresías VIP", icon: Star },
-    { href: "/admin/recargas", label: "Validar Recargas USDT", icon: Coins },
-    { href: "/admin/contenido", label: "Moderación de Contenido", icon: ImageIcon },
-    { href: "/admin/kyc", label: "Validación KYC Cédula", icon: FileCheck },
-    { href: "/admin/payouts", label: "Cortes Semanales", icon: DollarSign },
-    { href: "/admin/infracciones", label: "Infracciones Anti-Descarga", icon: AlertOctagon },
-    { href: "/admin/settings", label: "Configuración General", icon: Settings },
-  ];
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row">
@@ -63,24 +34,7 @@ export default async function AdminLayout({
           </div>
         </div>
 
-        <nav className="space-y-1">
-          {navLinks.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-900 transition group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icon className="w-4 h-4 text-slate-400 group-hover:text-rose-400 transition" />
-                  <span>{item.label}</span>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:translate-x-0.5 transition" />
-              </Link>
-            );
-          })}
-        </nav>
+        <AdminSidebarNav />
       </aside>
 
       {/* Contenido principal del panel */}

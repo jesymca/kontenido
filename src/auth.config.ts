@@ -28,6 +28,7 @@ export const authConfig = {
         token.suspensionReason = user.suspensionReason;
         token.country = user.country;
         token.gender = user.gender;
+        token.interestedIn = user.interestedIn;
       }
 
       if (trigger === "update" && session) {
@@ -39,6 +40,7 @@ export const authConfig = {
         token.allowDownload = session.allowDownload ?? token.allowDownload;
         token.country = session.country ?? token.country;
         token.gender = session.gender ?? token.gender;
+        token.interestedIn = session.interestedIn ?? token.interestedIn;
       }
 
       return token;
@@ -58,6 +60,7 @@ export const authConfig = {
         session.user.suspensionReason = token.suspensionReason as string | null;
         session.user.country = (token.country as string) || "VE";
         session.user.gender = (token.gender as string | null) ?? null;
+        session.user.interestedIn = (token.interestedIn as string | null) ?? null;
       }
       return session;
     },

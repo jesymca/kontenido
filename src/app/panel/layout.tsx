@@ -8,12 +8,13 @@ import Link from "next/link";
 import { Sparkles, ShieldCheck, ArrowRight } from "lucide-react";
 
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { getCurrentDbUser } from "@/lib/session";
 import { isVenezuelanUser } from "@/lib/countries";
 
 /**
  * Layout del Estudio de Creadora (/panel/*)
- * Verifica el rol contra Turso DB en tiempo real (evitando redirecciones erróneas por cookies antiguas en Edge)
- * y permite activar el modo creadora en 1 clic si la cuenta se creó inicialmente con Google como consumidor.
+ * Verifica el rol contra Turso DB usando la consulta deduplicada por petición (React.cache)
+ * y permite activar el modo creadora en 1 clic si la cuenta se creó inicialmente como consumidor.
  */
 export default async function PanelLayout({
   children,
@@ -26,16 +27,7 @@ export default async function PanelLayout({
     redirect("/login?callbackUrl=/panel");
   }
 
-  const emailLookup = session.user.email?.toLowerCase().trim();
-  const dbUser = emailLookup
-    ? await db.query.users.findFirst({
-        where: session.user.id
-          ? or(eq(users.id, session.user.id), eq(users.email, emailLookup))
-          : eq(users.email, emailLookup),
-      })
-    : await db.query.users.findFirst({
-        where: eq(users.id, session.user.id),
-      });
+  const dbUser = await getCurrentDbUser();
 
   if (!dbUser) {
     redirect("/login?callbackUrl=/panel");

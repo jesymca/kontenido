@@ -14,6 +14,12 @@ import {
 } from "@/lib/db/schema";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { validateNoExternalContact } from "@/lib/contentFilter";
+import {
+  normalizeGenderValue,
+  parseInterestedIn,
+  serializeInterestedIn,
+  matchesGenderPreference,
+} from "@/lib/countries";
 import { deleteObjectFromR2, BUCKETS } from "@/lib/r2";
 import { eq, and, or, desc, asc, ne, inArray, gte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -184,7 +190,8 @@ export async function computeUserLikeQuota(
 }
 
 /**
- * Permite a usuarios existentes o de Google OAuth completar su género y país para KOMESTIBLE
+ * Permite completar o actualizar la identidad (HOMBRE/MUJER/PAREJA/TRANSGÉNERO),
+ * a quién está interesado/a en conocer (para KOMESTIBLE estilo Badoo) y país.
  */
 export async function updateMyKomestibleIdentityAction(formData: FormData) {
   await ensureKomestibleSchema();
@@ -193,12 +200,20 @@ export async function updateMyKomestibleIdentityAction(formData: FormData) {
     return { error: "Debes iniciar sesión." };
   }
 
-  const genderRaw = (formData.get("gender") as string)?.toUpperCase().trim();
+  const genderNorm = normalizeGenderValue(formData.get("gender") as string | null);
   const countryRaw = (formData.get("country") as string)?.toUpperCase().trim();
+  const rawInterested = formData.getAll("interestedIn").map(String);
+  const serializedInterestedIn = serializeInterestedIn(rawInterested);
 
-  const validGenders = ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"] as const;
-  if (!validGenders.includes(genderRaw as any)) {
-    return { error: "Selecciona una opción de género válida." };
+  if (!genderNorm) {
+    return { error: "Selecciona si eres Hombre, Mujer, Pareja o Transgénero." };
+  }
+
+  if (!serializedInterestedIn) {
+    return {
+      error:
+        "Selecciona al menos una opción de a quién estás interesado/a en conocer (Hombre, Mujer, Pareja o Transgénero).",
+    };
   }
 
   const country = countryRaw && /^[A-Z]{2,5}$/.test(countryRaw) ? countryRaw : undefined;
@@ -207,15 +222,120 @@ export async function updateMyKomestibleIdentityAction(formData: FormData) {
   await db
     .update(users)
     .set({
-      gender: genderRaw as any,
+      gender: genderNorm,
+      interestedIn: serializedInterestedIn,
       ...(country ? { country } : {}),
       updatedAt: now,
     })
     .where(eq(users.id, session.user.id));
 
+  // Mantener sincronizada la categoría del perfil si existe
+  await db
+    .update(profiles)
+    .set({
+      creatorCategory: genderNorm,
+      updatedAt: now,
+    })
+    .where(eq(profiles.userId, session.user.id));
+
+  revalidatePath("/", "layout");
   revalidatePath("/komestible");
   revalidatePath("/koinciden");
+  revalidatePath("/cuenta");
+  revalidatePath("/panel/perfil");
   return { success: true };
+}
+
+/**
+ * Actualiza la información básica del perfil (para Consumidores y cualquier usuario desde /cuenta)
+ * preguntando identidad (HOMBRE/MUJER/PAREJA/TRANSGÉNERO) y a quién desea conocer en KOMESTIBLE.
+ */
+export async function updateBasicProfileAction(formData: FormData) {
+  await ensureKomestibleSchema();
+  const session = await auth();
+  if (!session?.user) {
+    return { error: "Debes iniciar sesión." };
+  }
+
+  const userId = session.user.id;
+  const displayName = (formData.get("displayName") as string)?.trim();
+  const bio = (formData.get("bio") as string)?.trim() || "";
+  const countryRaw = (formData.get("country") as string)?.toUpperCase().trim();
+  const genderNorm = normalizeGenderValue(formData.get("gender") as string | null);
+  const rawInterested = formData.getAll("interestedIn").map(String);
+  const serializedInterestedIn = serializeInterestedIn(rawInterested);
+
+  if (!displayName || displayName.length < 2) {
+    return { error: "Ingresa tu nombre para mostrar (mínimo 2 caracteres)." };
+  }
+  if (!genderNorm) {
+    return { error: "Debes indicar si eres Hombre, Mujer, Pareja o Transgénero." };
+  }
+  if (!serializedInterestedIn) {
+    return {
+      error:
+        "Debes seleccionar al menos una opción en 'Interesado/a en conocer' para KOMESTIBLE.",
+    };
+  }
+
+  const nameFilter = validateNoExternalContact(displayName, "El nombre para mostrar");
+  if (!nameFilter.valid) return { error: nameFilter.error };
+  if (bio) {
+    const bioFilter = validateNoExternalContact(bio, "La biografía");
+    if (!bioFilter.valid) return { error: bioFilter.error };
+  }
+
+  const country = countryRaw && /^[A-Z]{2,5}$/.test(countryRaw) ? countryRaw : undefined;
+  const now = new Date().toISOString();
+
+  await db
+    .update(users)
+    .set({
+      gender: genderNorm,
+      interestedIn: serializedInterestedIn,
+      ...(country ? { country } : {}),
+      updatedAt: now,
+    })
+    .where(eq(users.id, userId));
+
+  const existingProfile = await db.query.profiles.findFirst({
+    where: eq(profiles.userId, userId),
+  });
+
+  if (existingProfile) {
+    await db
+      .update(profiles)
+      .set({
+        displayName,
+        bio: bio || existingProfile.bio,
+        creatorCategory: genderNorm,
+        updatedAt: now,
+      })
+      .where(eq(profiles.userId, userId));
+  } else {
+    await db.insert(profiles).values({
+      userId,
+      displayName,
+      bio: bio || "¡Hola! Estoy usando KONTENIDO.",
+      subscriptionPriceKoin: 0.0,
+      creatorCategory: genderNorm,
+      isPublished: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  revalidatePath("/", "layout");
+  revalidatePath("/cuenta");
+  revalidatePath("/panel/perfil");
+  revalidatePath("/komestible");
+  revalidatePath("/koinciden");
+
+  return {
+    success: true,
+    gender: genderNorm,
+    interestedIn: parseInterestedIn(serializedInterestedIn),
+  };
 }
 
 /**
@@ -321,7 +441,9 @@ export async function deleteKomestiblePhotoAction(photoId: string) {
 }
 
 /**
- * Obtiene la pila de tarjetas deslizables (Discovery Deck) para KOMESTIBLE
+ * Obtiene la pila de tarjetas deslizables (Discovery Deck) para KOMESTIBLE estilo Badoo.
+ * Por defecto ("PREFERENCES") aplica las preferencias 'interestedIn' del usuario y
+ * compatibilidad mutua cuando el candidato también declaró a quién desea conocer.
  */
 export async function getDiscoveryDeckAction(filters?: {
   genderFilter?: string;
@@ -335,21 +457,27 @@ export async function getDiscoveryDeckAction(filters?: {
 
   const currentUserId = session.user.id;
 
-  // 1. Obtener usuarios ya evaluados (swiped) por el usuario actual
-  const mySwipes = await db.query.komestibleSwipes.findMany({
-    where: eq(komestibleSwipes.swiperId, currentUserId),
-  });
-  const swipedSet = new Set(mySwipes.map((s) => s.targetUserId));
+  // 1. Obtener usuario actual, swipes realizados y fotos aprobadas en paralelo
+  const [me, mySwipes, allApprovedPhotos] = await Promise.all([
+    db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    }),
+    db.query.komestibleSwipes.findMany({
+      where: eq(komestibleSwipes.swiperId, currentUserId),
+    }),
+    db.query.komestiblePhotos.findMany({
+      where: and(
+        ne(komestiblePhotos.userId, currentUserId),
+        eq(komestiblePhotos.status, "APPROVED"),
+        eq(komestiblePhotos.isActive, 1)
+      ),
+      orderBy: [asc(komestiblePhotos.sortOrder), desc(komestiblePhotos.createdAt)],
+    }),
+  ]);
 
-  // 2. Obtener todas las fotos aprobadas y activas de otros usuarios
-  const allApprovedPhotos = await db.query.komestiblePhotos.findMany({
-    where: and(
-      ne(komestiblePhotos.userId, currentUserId),
-      eq(komestiblePhotos.status, "APPROVED"),
-      eq(komestiblePhotos.isActive, 1)
-    ),
-    orderBy: [asc(komestiblePhotos.sortOrder), desc(komestiblePhotos.createdAt)],
-  });
+  const swipedSet = new Set(mySwipes.map((s) => s.targetUserId));
+  const myGender = normalizeGenderValue(me?.gender);
+  const myInterestedIn = parseInterestedIn(me?.interestedIn);
 
   const candidateUserIds = Array.from(
     new Set(
@@ -387,7 +515,7 @@ export async function getDiscoveryDeckAction(filters?: {
     photosByUser.set(ph.userId, arr);
   }
 
-  const genderFilter = filters?.genderFilter?.toUpperCase().trim();
+  const genderFilterRaw = (filters?.genderFilter || "PREFERENCES").toUpperCase().trim();
   const countryFilter = filters?.countryFilter?.toUpperCase().trim();
 
   const cards: KomestibleDeckCard[] = [];
@@ -395,10 +523,32 @@ export async function getDiscoveryDeckAction(filters?: {
     const userPhotos = photosByUser.get(u.id);
     if (!userPhotos || userPhotos.length === 0) continue;
 
-    const effectiveGender = u.gender || u.profile?.creatorCategory || null;
-    if (genderFilter && genderFilter !== "ALL" && effectiveGender !== genderFilter) {
-      continue;
+    const effectiveGender =
+      normalizeGenderValue(u.gender) ||
+      normalizeGenderValue(u.profile?.creatorCategory) ||
+      null;
+
+    if (genderFilterRaw === "PREFERENCES") {
+      // Emparejamiento estilo Badoo: respetar a quién está interesado/a en conocer el usuario actual
+      if (myInterestedIn.length > 0 && !matchesGenderPreference(effectiveGender, myInterestedIn)) {
+        continue;
+      }
+      // Compatibilidad mutua: si el candidato también configuró a quién desea conocer, verificar que encajemos
+      const candidateInterested = parseInterestedIn(u.interestedIn);
+      if (
+        myGender &&
+        candidateInterested.length > 0 &&
+        !matchesGenderPreference(myGender, candidateInterested)
+      ) {
+        continue;
+      }
+    } else if (genderFilterRaw !== "ALL") {
+      const targetNorm = normalizeGenderValue(genderFilterRaw);
+      if (targetNorm && effectiveGender !== targetNorm) {
+        continue;
+      }
     }
+
     if (countryFilter && countryFilter !== "ALL" && (u.country || "VE") !== countryFilter) {
       continue;
     }
@@ -495,6 +645,13 @@ export async function swipeKomestibleAction(input: {
   });
   if (!currentUser) {
     return { error: "Usuario no encontrado." };
+  }
+
+  if (!normalizeGenderValue(currentUser.gender)) {
+    return {
+      error:
+        "Antes de interactuar en KOMESTIBLE debes indicar si eres Hombre, Mujer, Pareja o Transgénero en tu perfil básico.",
+    };
   }
 
   // Verificar si ya existe un swipe previo hacia este usuario
@@ -800,10 +957,7 @@ export async function promoteToCreatorFromKomestibleAction() {
     orderBy: [desc(komestiblePhotos.likesReceived), asc(komestiblePhotos.sortOrder)],
   });
 
-  const creatorCat =
-    user.gender && ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"].includes(user.gender)
-      ? (user.gender as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
-      : "MUJER";
+  const creatorCat = normalizeGenderValue(user.gender) || "MUJER";
 
   await db
     .update(users)

@@ -25,17 +25,21 @@ import {
  * Resumen Global del SUPER_ADMIN (/admin)
  */
 export default async function AdminDashboardPage() {
-  const totalUsers = await db.$count(users);
-  const totalCreators = await db.$count(users, eq(users.role, "CREATOR"));
-  const totalConsumers = await db.$count(users, eq(users.role, "CONSUMER"));
-
-  const pendingKyc = await db.$count(kycDocuments, eq(kycDocuments.status, "PENDING"));
-  const pendingTopups = await db.$count(
-    walletTransactions,
-    eq(walletTransactions.status, "PENDING")
-  );
-  const totalInfractions = await db.$count(downloadInfractions);
-  const totalPosts = await db.$count(posts, eq(posts.isDeleted, 0));
+  const [
+    totalUsers,
+    totalCreators,
+    totalConsumers,
+    pendingKyc,
+    pendingTopups,
+    totalInfractions,
+  ] = await Promise.all([
+    db.$count(users),
+    db.$count(users, eq(users.role, "CREATOR")),
+    db.$count(users, eq(users.role, "CONSUMER")),
+    db.$count(kycDocuments, eq(kycDocuments.status, "PENDING")),
+    db.$count(walletTransactions, eq(walletTransactions.status, "PENDING")),
+    db.$count(downloadInfractions),
+  ]);
 
   return (
     <div className="space-y-8 max-w-6xl">

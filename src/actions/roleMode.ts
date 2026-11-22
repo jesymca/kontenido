@@ -11,6 +11,7 @@ import {
   auditLog,
 } from "@/lib/db/schema";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { normalizeGenderValue } from "@/lib/countries";
 import { eq, and, desc, asc, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -61,11 +62,7 @@ export async function activateCreatorModeAction() {
     orderBy: [desc(komestiblePhotos.likesReceived), asc(komestiblePhotos.sortOrder)],
   });
 
-  const creatorCat =
-    dbUser.gender &&
-    ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"].includes(dbUser.gender)
-      ? (dbUser.gender as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
-      : "MUJER";
+  const creatorCat = normalizeGenderValue(dbUser.gender) || "MUJER";
 
   await db
     .update(users)

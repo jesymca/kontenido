@@ -52,39 +52,47 @@ export default async function AdminKomestiblePage() {
 
   const maleUsersRaw = allUsers.filter((u) => u.gender === "HOMBRE");
   const totalLikesByUser = new Map<string, number>();
+  const periodLikesByUser = new Map<string, number>();
+
+  const now = new Date();
+  const periodStartIso =
+    config.maleLimitPeriod === "DAILY"
+      ? `${now.toISOString().slice(0, 10)}T00:00:00.000Z`
+      : config.maleLimitPeriod === "WEEKLY"
+      ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+
   let totalLikes = 0;
   let totalPasses = 0;
   for (const s of allSwipes) {
     if (s.action === "LIKE") {
       totalLikes++;
       totalLikesByUser.set(s.swiperId, (totalLikesByUser.get(s.swiperId) || 0) + 1);
+      if (!periodStartIso || s.createdAt >= periodStartIso) {
+        periodLikesByUser.set(s.swiperId, (periodLikesByUser.get(s.swiperId) || 0) + 1);
+      }
     } else {
       totalPasses++;
     }
   }
 
-  const maleUsers: AdminMaleQuotaItem[] = await Promise.all(
-    maleUsersRaw.map(async (u) => {
-      const q = await computeUserLikeQuota(
-        u.id,
-        u.gender,
-        u.vipMembershipId,
-        u.komestibleBonusLikes,
-        config
-      );
-      return {
-        id: u.id,
-        username: u.username,
-        country: u.country || "VE",
-        role: u.role,
-        likesUsedInPeriod: q.used,
-        totalLikesGiven: totalLikesByUser.get(u.id) || 0,
-        bonusLikes: u.komestibleBonusLikes || 0,
-        effectiveLimit: q.limit ?? config.maleLikesLimit,
-        remaining: q.remaining ?? 9999,
-      };
-    })
-  );
+  // Cálculo 100% en memoria a partir de allSwipes (0 consultas N+1 adicionales a Turso)
+  const maleUsers: AdminMaleQuotaItem[] = maleUsersRaw.map((u) => {
+    const used = periodLikesByUser.get(u.id) || 0;
+    const isUnlimited = config.vipUnlimited && Boolean(u.vipMembershipId);
+    const effectiveLimit = Math.max(0, config.maleLikesLimit + (u.komestibleBonusLikes || 0));
+    return {
+      id: u.id,
+      username: u.username,
+      country: u.country || "VE",
+      role: u.role,
+      likesUsedInPeriod: used,
+      totalLikesGiven: totalLikesByUser.get(u.id) || 0,
+      bonusLikes: u.komestibleBonusLikes || 0,
+      effectiveLimit,
+      remaining: isUnlimited ? 9999 : Math.max(0, effectiveLimit - used),
+    };
+  });
 
   const msgCountByMatch = new Map<string, number>();
   for (const m of allMatchMsgs) {

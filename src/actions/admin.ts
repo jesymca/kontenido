@@ -163,8 +163,8 @@ export async function updateAdminUserAction(formData: FormData): Promise<{ succe
     if (country) {
       updatePayload.country = country;
     }
-    if (gender && ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"].includes(gender)) {
-      updatePayload.gender = gender;
+    if (gender && ["MUJER", "HOMBRE", "PAREJA", "TRANSGENERO", "TRANSEXUAL", "OTRO"].includes(gender)) {
+      updatePayload.gender = gender === "TRANSEXUAL" ? "TRANSGENERO" : gender;
     }
 
     await db
@@ -499,6 +499,7 @@ export async function reviewKycAction(kycDocId: string, status: "APPROVED" | "RE
     .update(kycDocuments)
     .set({
       status,
+      verificationMode: "MANUAL",
       rejectionReason: status === "REJECTED" ? reason : null,
       reviewerId: admin.id,
       reviewedAt: now,
@@ -530,6 +531,43 @@ export async function reviewKycAction(kycDocId: string, status: "APPROVED" | "RE
   revalidatePath("/panel");
   revalidatePath("/");
   return { success: true };
+}
+
+/**
+ * Activa o desactiva la aprobación automática de mayoría de edad (+18) en KYC
+ */
+export async function toggleKycAutoApproveAction(enabled: boolean) {
+  const admin = await requireSuperAdmin();
+  const now = new Date().toISOString();
+  const value = enabled ? "1" : "0";
+
+  await db
+    .insert(settings)
+    .values({
+      key: "kyc_auto_approve_enabled",
+      value,
+      description:
+        "Habilita (1) o deshabilita (0) la aprobación automática de mayoría de edad (+18) al subir archivos KYC",
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value, updatedAt: now },
+    });
+
+  await db.insert(auditLog).values({
+    id: crypto.randomUUID(),
+    actorId: admin.id,
+    action: "KYC_AUTO_APPROVE_TOGGLED",
+    entity: "settings",
+    entityId: "kyc_auto_approve_enabled",
+    meta: JSON.stringify({ enabled }),
+    ipAddress: "127.0.0.1",
+    createdAt: now,
+  });
+
+  revalidatePath("/admin/kyc");
+  return { success: true, enabled };
 }
 
 /**

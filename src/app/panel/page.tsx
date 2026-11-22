@@ -31,7 +31,7 @@ import DeletePostButton from "@/components/DeletePostButton";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
 import SocialPostComposer from "@/components/SocialPostComposer";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
-import { isVenezuelanUser, getCountryMeta } from "@/lib/countries";
+import { isVenezuelanUser, getCountryMeta, parseInterestedIn } from "@/lib/countries";
 import { redirect } from "next/navigation";
 
 export const metadata = {
@@ -52,49 +52,57 @@ export default async function PanelPage() {
 
   const userId = session.user.id;
 
-  // 1. Obtener datos del usuario creador y su perfil
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    with: {
-      profile: true,
-    },
-  });
-
-  const wallet = await db.query.wallets.findFirst({
-    where: eq(wallets.userId, userId),
-  });
-
-  const creatorPosts = await db.query.posts.findMany({
-    where: and(eq(posts.creatorId, userId), eq(posts.isDeleted, 0)),
-    orderBy: [desc(posts.createdAt)],
-    with: {
-      media: true,
-    },
-  });
-
-  const totalSubs = await db.$count(
-    subscriptions,
-    and(eq(subscriptions.creatorId, userId), eq(subscriptions.status, "ACTIVE"))
-  );
-
-  const paymentMethod = await db.query.paymentMethods.findFirst({
-    where: eq(paymentMethods.creatorId, userId),
-  });
-
-  const existingPlans = await db.query.creatorSubscriptionPlans.findMany({
-    where: eq(creatorSubscriptionPlans.creatorId, userId),
-  });
-
-  const unreadMessagesCount = await db.$count(
-    messages,
-    and(eq(messages.receiverId, userId), eq(messages.isRead, 0))
-  );
+  // 1. Ejecutar las 7 consultas del estudio EN PARALELO para respuesta instantánea
+  const [
+    user,
+    wallet,
+    creatorPosts,
+    totalSubs,
+    paymentMethod,
+    existingPlans,
+    unreadMessagesCount,
+  ] = await Promise.all([
+    db.query.users.findFirst({
+      where: eq(users.id, userId),
+      with: { profile: true },
+    }),
+    db.query.wallets.findFirst({
+      where: eq(wallets.userId, userId),
+    }),
+    db.query.posts.findMany({
+      where: and(eq(posts.creatorId, userId), eq(posts.isDeleted, 0)),
+      orderBy: [desc(posts.createdAt)],
+      with: { media: true },
+    }),
+    db.$count(
+      subscriptions,
+      and(eq(subscriptions.creatorId, userId), eq(subscriptions.status, "ACTIVE"))
+    ),
+    db.query.paymentMethods.findFirst({
+      where: eq(paymentMethods.creatorId, userId),
+    }),
+    db.query.creatorSubscriptionPlans.findMany({
+      where: eq(creatorSubscriptionPlans.creatorId, userId),
+    }),
+    db.$count(
+      messages,
+      and(eq(messages.receiverId, userId), eq(messages.isRead, 0))
+    ),
+  ]);
 
   const isVenezuela = isVenezuelanUser(user?.country);
   const countryMeta = getCountryMeta(user?.country);
+  const hasBasicIdentityAndInterests =
+    Boolean(user?.gender) && parseInterestedIn(user?.interestedIn).length > 0;
 
   // 2. Checklist de configuración estilo OnlyFans
   const checklist = [
+    {
+      title: "Identidad y Preferencias KOMESTIBLE",
+      desc: "Indica si eres Hombre, Mujer, Pareja o Transgénero y a quién deseas conocer",
+      completed: hasBasicIdentityAndInterests,
+      href: "/panel/perfil?completar=1",
+    },
     {
       title: "Foto de perfil (Avatar)",
       desc: "Muestra tu rostro o imagen distintiva",

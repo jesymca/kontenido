@@ -7,6 +7,8 @@ import {
   komestibleSwipes,
 } from "@/lib/db/schema";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { getCurrentDbUser } from "@/lib/session";
+import { normalizeGenderValue, parseInterestedIn } from "@/lib/countries";
 import {
   getKomestibleConfig,
   computeUserLikeQuota,
@@ -110,12 +112,12 @@ export default async function KomestiblePage() {
   const [config, currentUser, myPhotos, deckRes, matchesCount, admirersRes] =
     await Promise.all([
       getKomestibleConfig(),
-      db.query.users.findFirst({ where: eq(users.id, userId) }),
+      getCurrentDbUser(),
       db.query.komestiblePhotos.findMany({
         where: eq(komestiblePhotos.userId, userId),
         orderBy: [desc(komestiblePhotos.createdAt)],
       }),
-      getDiscoveryDeckAction(),
+      getDiscoveryDeckAction({ genderFilter: "PREFERENCES" }),
       db.$count(
         komestibleMatches,
         and(
@@ -137,9 +139,12 @@ export default async function KomestiblePage() {
         ),
     ]);
 
+  const normalizedGender = normalizeGenderValue(currentUser?.gender);
+  const interestedInList = parseInterestedIn(currentUser?.interestedIn);
+
   const quota = await computeUserLikeQuota(
     userId,
-    currentUser?.gender,
+    normalizedGender,
     currentUser?.vipMembershipId,
     currentUser?.komestibleBonusLikes || 0,
     config
@@ -156,7 +161,8 @@ export default async function KomestiblePage() {
         id: userId,
         username: currentUser?.username || session.user.username,
         role: currentUser?.role || session.user.role,
-        gender: currentUser?.gender || null,
+        gender: normalizedGender,
+        interestedIn: interestedInList,
         country: currentUser?.country || "VE",
       }}
       initialQuota={quota}

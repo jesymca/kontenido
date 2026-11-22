@@ -27,7 +27,7 @@ import { validateNoExternalContact } from "@/lib/contentFilter";
 import { resolveCreatorTarget } from "@/lib/creatorTarget";
 import { ensureChatSchema } from "@/lib/db/initChat";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
-import { isVenezuelanUser } from "@/lib/countries";
+import { isVenezuelanUser, normalizeGenderValue, serializeInterestedIn } from "@/lib/countries";
 import { createPostForCreator } from "@/lib/posts";
 
 const RESERVED_USERNAMES = new Set([
@@ -165,8 +165,7 @@ export async function checkUsernameAvailabilityAction(
  * Actualizar perfil público de la Creadora (incluyendo edición del enlace / username)
  */
 export async function updateProfileAction(formData: FormData) {
-  await ensureChatSchema();
-  await ensureKomestibleSchema();
+  await Promise.all([ensureChatSchema(), ensureKomestibleSchema()]);
   const session = await auth();
   if (!session?.user) {
     return { error: "No autorizado" };
@@ -191,11 +190,24 @@ export async function updateProfileAction(formData: FormData) {
   const bio = (formData.get("bio") as string)?.trim();
   const priceRaw = formData.get("subscriptionPriceKoin") as string;
   const subscriptionPriceKoin = parseFloat(priceRaw) || 10.0;
-  const rawCategory = (formData.get("creatorCategory") as string) || "MUJER";
-  const validCategories = ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"] as const;
-  const creatorCategory = validCategories.includes(rawCategory as any)
-    ? (rawCategory as "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL")
-    : "MUJER";
+  const rawCategory = (formData.get("creatorCategory") as string) || "";
+  const normalizedIdentity = normalizeGenderValue(rawCategory);
+  if (!normalizedIdentity) {
+    return {
+      error: "Debes indicar si eres Hombre, Mujer, Pareja o Transgénero.",
+    };
+  }
+  const creatorCategory = normalizedIdentity;
+
+  const rawInterestedValues = formData.getAll("interestedIn").map(String);
+  const serializedInterestedIn = serializeInterestedIn(rawInterestedValues);
+  if (!target.isAgencyManaged && !serializedInterestedIn) {
+    return {
+      error:
+        "Debes seleccionar al menos una opción de a quién estás interesado/a en conocer (Hombre, Mujer, Pareja o Transgénero) para KOMESTIBLE.",
+    };
+  }
+
   const isPublished = formData.get("isPublished") === "on" || formData.get("isPublished") === "1" ? 1 : 0;
   const isAiGenerated = formData.get("isAiGenerated") === "on" || formData.get("isAiGenerated") === "1" ? 1 : 0;
   const avatarKey = (formData.get("avatarKey") as string) || undefined;
@@ -275,6 +287,7 @@ export async function updateProfileAction(formData: FormData) {
       .set({
         ...(country ? { country } : {}),
         gender: creatorCategory,
+        ...(serializedInterestedIn ? { interestedIn: serializedInterestedIn } : {}),
         updatedAt: now,
       })
       .where(eq(users.id, userId));
@@ -285,6 +298,7 @@ export async function updateProfileAction(formData: FormData) {
   revalidatePath(`/${finalUsername}`);
   revalidatePath("/panel");
   revalidatePath("/panel/perfil");
+  revalidatePath("/komestible");
   revalidatePath("/agencia");
   revalidatePath(`/agencia/creadoras/${userId}`);
 

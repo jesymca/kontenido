@@ -6,7 +6,14 @@ import { updateProfileAction } from "@/actions/creator";
 import UsernameAvailabilityInput from "@/components/UsernameAvailabilityInput";
 import { validateNoExternalContact } from "@/lib/contentFilter";
 import { CREATOR_CATEGORIES } from "@/lib/creatorCategories";
-import { COUNTRIES, isVenezuelanUser } from "@/lib/countries";
+import {
+  COUNTRIES,
+  IDENTITY_GENDERS,
+  isVenezuelanUser,
+  normalizeGenderValue,
+  parseInterestedIn,
+  type IdentityGenderValue,
+} from "@/lib/countries";
 import ImageCropModal from "@/components/ImageCropModal";
 import MediaCaptureModal from "@/components/MediaCaptureModal";
 import { uploadFileToR2 } from "@/lib/uploadClient";
@@ -25,6 +32,8 @@ import {
   Move,
   Smartphone,
   Bot,
+  Flame,
+  Heart,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -50,6 +59,8 @@ interface Props {
   kycStatus?: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
   managedCreatorId?: string;
   initialCountry?: string;
+  initialGender?: string | null;
+  initialInterestedIn?: string | null;
 }
 
 export default function ProfileForm({
@@ -58,6 +69,8 @@ export default function ProfileForm({
   kycStatus = "NONE",
   managedCreatorId,
   initialCountry = "VE",
+  initialGender = null,
+  initialInterestedIn = null,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -67,13 +80,24 @@ export default function ProfileForm({
   const [activeUsername, setActiveUsername] = useState(username);
   const [isUsernameValid, setIsUsernameValid] = useState(true);
   const [bioState, setBioState] = useState(profile?.bio || "");
-  const [creatorCategory, setCreatorCategory] = useState(
-    profile?.creatorCategory || "MUJER"
+  // Si el usuario aún no definió su identidad real (initialGender null y no es gestionado por agencia), iniciar vacío para que elija explícitamente
+  const [creatorCategory, setCreatorCategory] = useState<IdentityGenderValue | "">(
+    normalizeGenderValue(initialGender) ||
+      (managedCreatorId ? normalizeGenderValue(profile?.creatorCategory) || "MUJER" : "")
+  );
+  const [interestedIn, setInterestedIn] = useState<IdentityGenderValue[]>(
+    parseInterestedIn(initialInterestedIn)
   );
   const [countryState, setCountryState] = useState(initialCountry || "VE");
   const isVenezuela = isVenezuelanUser(countryState);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const toggleInterestedIn = (val: IdentityGenderValue) => {
+    setInterestedIn((prev) =>
+      prev.includes(val) ? prev.filter((item) => item !== val) : [...prev, val]
+    );
+  };
 
   const handleInsertEmoji = (emoji: string) => {
     setBioState((prev) => prev + emoji);
@@ -199,12 +223,29 @@ export default function ProfileForm({
       return;
     }
 
+    if (!creatorCategory) {
+      setError("Por favor indica qué eres: Hombre, Mujer, Pareja o Transgénero.");
+      return;
+    }
+
+    if (!managedCreatorId && interestedIn.length === 0) {
+      setError(
+        "Por favor selecciona al menos una opción en '¿A quién estás interesado/a en conocer?' para KOMESTIBLE."
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSuccess(false);
 
     const formEl = e.currentTarget;
     const formData = new FormData(formEl);
+    formData.set("creatorCategory", creatorCategory);
+    formData.delete("interestedIn");
+    for (const item of interestedIn) {
+      formData.append("interestedIn", item);
+    }
 
     const checkName = validateNoExternalContact(formData.get("displayName") as string, "El nombre para mostrar");
     if (!checkName.valid) {
@@ -399,15 +440,15 @@ export default function ProfileForm({
 
         <div>
           <label className="block text-xs font-semibold text-slate-300 mb-2">
-            Categoría del Perfil (Identidad)
+            ¿Qué eres? (Identidad del Perfil) <span className="text-rose-400">*</span>
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {CREATOR_CATEGORIES.map((cat) => (
+            {IDENTITY_GENDERS.map((cat) => (
               <button
                 key={cat.value}
                 type="button"
                 onClick={() => setCreatorCategory(cat.value)}
-                className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition ${
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
                   creatorCategory === cat.value
                     ? "bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/20"
                     : "bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700"
@@ -418,6 +459,56 @@ export default function ProfileForm({
             ))}
           </div>
         </div>
+
+        {!managedCreatorId && (
+          <div className="sm:col-span-2 p-4 bg-gradient-to-r from-rose-950/35 via-slate-950 to-amber-950/25 border border-rose-500/30 rounded-2xl space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Flame className="w-4 h-4 text-rose-500 fill-rose-500" />
+                ¿A quién estás interesado/a en conocer? <span className="text-rose-400">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setInterestedIn(
+                    interestedIn.length === IDENTITY_GENDERS.length
+                      ? []
+                      : IDENTITY_GENDERS.map((g) => g.value)
+                  )
+                }
+                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer"
+              >
+                {interestedIn.length === IDENTITY_GENDERS.length
+                  ? "Desmarcar todos"
+                  : "Seleccionar todos"}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Esta preferencia se utiliza en la sección gratuita <strong className="text-rose-300">KOMESTIBLE</strong> (estilo Badoo) para mostrarte personas compatibles contigo. Puedes elegir una o varias opciones.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              {IDENTITY_GENDERS.map((opt) => {
+                const active = interestedIn.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleInterestedIn(opt.value)}
+                    aria-pressed={active}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      active
+                        ? "bg-gradient-to-r from-rose-600 to-pink-600 text-white border-rose-400 shadow-md shadow-rose-600/25"
+                        : "bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700"
+                    }`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${active ? "fill-white" : ""}`} />
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div>
           <UsernameAvailabilityInput

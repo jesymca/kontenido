@@ -1,10 +1,8 @@
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import CreatorPanelNav from "@/components/CreatorPanelNav";
 import CedulaOcrScanner from "@/components/CedulaOcrScanner";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { getCurrentDbUser } from "@/lib/session";
 import { getCountryMeta, isVenezuelanUser } from "@/lib/countries";
 import { ShieldCheck } from "lucide-react";
 
@@ -13,12 +11,7 @@ import { ShieldCheck } from "lucide-react";
  */
 export default async function KycPage() {
   await ensureKomestibleSchema();
-  const session = await auth();
-  const currentUser = session?.user
-    ? await db.query.users.findFirst({
-        where: eq(users.id, session.user.id),
-      })
-    : null;
+  const [session, currentUser] = await Promise.all([auth(), getCurrentDbUser()]);
 
   const isVenezuela = isVenezuelanUser(currentUser?.country);
   const countryMeta = getCountryMeta(currentUser?.country);

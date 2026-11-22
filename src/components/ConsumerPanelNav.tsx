@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -33,6 +34,11 @@ interface ConsumerPanelNavProps {
  */
 export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProps) {
   const pathname = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   const navItems = [
     {
@@ -89,14 +95,19 @@ export default function ConsumerPanelNav({ subscriptions }: ConsumerPanelNavProp
           </span>
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.exact
+            const isCurrent = item.exact
               ? pathname === item.href
               : pathname.startsWith(item.href);
+            const isActive = pendingHref ? pendingHref === item.href : isCurrent;
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
+                onClick={() => {
+                  if (!isCurrent) setPendingHref(item.href);
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition shrink-0 ${
                   isActive
                     ? "bg-rose-600 text-white shadow-sm shadow-rose-600/30"

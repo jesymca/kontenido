@@ -8,6 +8,7 @@ import CreatorPanelNav from "@/components/CreatorPanelNav";
 import { getDolarRates } from "@/lib/dolarapi";
 import { getCreatorCommissionTier } from "@/lib/commissions";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { getCurrentDbUser } from "@/lib/session";
 import { isVenezuelanUser, getCountryMeta } from "@/lib/countries";
 import { Wallet, Landmark, DollarSign } from "lucide-react";
 
@@ -22,30 +23,50 @@ export default async function PagosPage() {
 
   const userId = session.user.id;
 
-  // 0. Obtener usuario actual para estatus KYC y País
-  const currentUser = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+  // Ejecutar TODAS las consultas independientes en paralelo
+  const [
+    currentUser,
+    wallet,
+    allSettings,
+    allBanksRaw,
+    userMethods,
+    creatorPayouts,
+    creatorSubs,
+    allVips,
+  ] = await Promise.all([
+    getCurrentDbUser(),
+    db.query.wallets.findFirst({ where: eq(wallets.userId, userId) }),
+    db.query.settings.findMany(),
+    db.query.banks.findMany({ orderBy: (b, { asc }) => [asc(b.id)] }),
+    db.query.paymentMethods.findMany({
+      where: eq(paymentMethods.creatorId, userId),
+      with: { bank: true },
+    }),
+    db.query.payouts.findMany({
+      where: eq(payouts.creatorId, userId),
+      orderBy: [desc(payouts.createdAt)],
+      with: { paymentMethod: { with: { bank: true } } },
+    }),
+    db.query.subscriptions.findMany({
+      where: eq(subscriptions.creatorId, userId),
+      orderBy: [desc(subscriptions.startsAt)],
+      with: { subscriber: true },
+    }),
+    db.query.vipMemberships.findMany(),
+  ]);
+
   const isVenezuela = isVenezuelanUser(currentUser?.country);
   const countryMeta = getCountryMeta(currentUser?.country);
-
-  // 1. Obtener billetera de la creadora
-  const wallet = await db.query.wallets.findFirst({
-    where: eq(wallets.userId, userId),
-  });
+  const allBanks = isVenezuela ? allBanksRaw : [];
 
   const balanceKoin = wallet?.balanceKoin || 0;
   const totalEarnedKoin = wallet?.totalEarnedKoin || 0;
 
-  // 2. Obtener configuraciones de comisiones escalonadas de la plataforma
-  const allSettings = await db.query.settings.findMany();
   const settingsMap = new Map(allSettings.map((s) => [s.key, s.value]));
   const fallbackRate = parseFloat(settingsMap.get("fallback_usd_ves_rate") || "1030.88");
 
-  // 3. Evaluar tier de comisión (10%, 15%, 20%) según el nivel de la creadora y volumen general acumulado
   const tierInfo = getCreatorCommissionTier(totalEarnedKoin, settingsMap, currentUser?.level);
 
-  // 4. Consultar tasa de Dólar Paralelo en tiempo real desde ve.dolarapi.com (solo si es Venezuela)
   const dolarInfo = isVenezuela
     ? await getDolarRates(fallbackRate)
     : {
@@ -54,43 +75,6 @@ export default async function PagosPage() {
         fuente: "USDT 1:1 Internacional",
       };
 
-  // 5. Obtener los 30 bancos venezolanos (para VE) y métodos de cobro de la creadora
-  const allBanks = isVenezuela
-    ? await db.query.banks.findMany({
-        orderBy: (banks, { asc }) => [asc(banks.id)],
-      })
-    : [];
-
-  const userMethods = await db.query.paymentMethods.findMany({
-    where: eq(paymentMethods.creatorId, userId),
-    with: {
-      bank: true,
-    },
-  });
-
-  // 6. Obtener historial de retiros y liquidaciones de la creadora
-  const creatorPayouts = await db.query.payouts.findMany({
-    where: eq(payouts.creatorId, userId),
-    orderBy: [desc(payouts.createdAt)],
-    with: {
-      paymentMethod: {
-        with: {
-          bank: true,
-        },
-      },
-    },
-  });
-
-  // 7. Obtener lista de suscriptores y pagos de suscripción recibidos
-  const creatorSubs = await db.query.subscriptions.findMany({
-    where: eq(subscriptions.creatorId, userId),
-    orderBy: [desc(subscriptions.startsAt)],
-    with: {
-      subscriber: true,
-    },
-  });
-
-  const allVips = await db.query.vipMemberships.findMany();
   const vipMap = new Map(allVips.map((v) => [v.id, v]));
 
   const enrichedSubscribers = creatorSubs.map((sub) => {

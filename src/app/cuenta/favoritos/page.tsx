@@ -60,69 +60,65 @@ export default async function MisFavoritosPage() {
   }> = [];
 
   if (creatorIds.length > 0) {
-    const creators = await db.query.users.findMany({
-      where: inArray(users.id, creatorIds),
-      with: {
-        profile: true,
-      },
-    });
+    const [creators, activeSubs, mediaRows] = await Promise.all([
+      db.query.users.findMany({
+        where: inArray(users.id, creatorIds),
+        with: {
+          profile: true,
+        },
+      }),
+      db.query.subscriptions.findMany({
+        where: and(
+          eq(subscriptions.subscriberId, userId),
+          inArray(subscriptions.creatorId, creatorIds),
+          eq(subscriptions.status, "ACTIVE")
+        ),
+      }),
+      db
+        .select({
+          creatorId: mediaAssets.creatorId,
+          type: mediaAssets.type,
+          count: sql<number>`count(*)`,
+        })
+        .from(mediaAssets)
+        .where(
+          and(
+            inArray(mediaAssets.creatorId, creatorIds),
+            eq(mediaAssets.isDeleted, 0)
+          )
+        )
+        .groupBy(mediaAssets.creatorId, mediaAssets.type),
+    ]);
 
-    const activeSubs = await db.query.subscriptions.findMany({
-      where: and(
-        eq(subscriptions.subscriberId, userId),
-        inArray(subscriptions.creatorId, creatorIds),
-        eq(subscriptions.status, "ACTIVE")
-      ),
-    });
     const subSet = new Set(activeSubs.map((s) => s.creatorId));
+    const mediaMap = new Map<string, { photos: number; videos: number }>();
+    for (const m of mediaRows) {
+      const entry = mediaMap.get(m.creatorId) || { photos: 0, videos: 0 };
+      if (m.type === "IMAGE") entry.photos = Number(m.count || 0);
+      if (m.type === "VIDEO") entry.videos = Number(m.count || 0);
+      mediaMap.set(m.creatorId, entry);
+    }
 
-    enrichedFavorites = await Promise.all(
-      creators.map(async (creator) => {
-        let photos = 0;
-        let videos = 0;
+    enrichedFavorites = creators.map((creator) => {
+      const counts = mediaMap.get(creator.id);
+      const prof = creator.profile;
 
-        try {
-          const mediaCounts = await db
-            .select({
-              type: mediaAssets.type,
-              count: sql<number>`count(*)`,
-            })
-            .from(mediaAssets)
-            .where(
-              and(
-                eq(mediaAssets.creatorId, creator.id),
-                eq(mediaAssets.isDeleted, 0)
-              )
-            )
-            .groupBy(mediaAssets.type);
-
-          for (const m of mediaCounts) {
-            if (m.type === "IMAGE") photos = Number(m.count);
-            if (m.type === "VIDEO") videos = Number(m.count);
-          }
-        } catch {
-          // Fallback seguro
-        }
-
-        const prof = creator.profile;
-
-        return {
-          id: creator.id,
-          username: creator.username,
-          displayName: prof?.displayName || creator.username,
-          bio: prof?.bio || "Creadora de contenido en KONTENIDO.",
-          level: creator.level || 0,
-          avatarUrl: prof?.avatarKey ? `/api/media/${prof.avatarKey}` : null,
-          bannerUrl: prof?.bannerKey ? `/api/media/${prof.bannerKey}` : null,
-          priceKoin: prof?.subscriptionPriceKoin || 10.0,
-          likesCount: prof?.likesCount || 0,
-          isAiGenerated: prof?.isAiGenerated === 1,
-          photosCount: photos,
-          videosCount: videos,
-          isSubscriber: subSet.has(creator.id),
-        };
-      })
-    );
+      return {
+        id: creator.id,
+        username: creator.username,
+        displayName: prof?.displayName || creator.username,
+        bio: prof?.bio || "Creadora de contenido en KONTENIDO.",
+        level: creator.level || 0,
+        avatarUrl: prof?.avatarKey ? `/api/media/${prof.avatarKey}` : null,
+        bannerUrl: prof?.bannerKey ? `/api/media/${prof.bannerKey}` : null,
+        priceKoin: prof?.subscriptionPriceKoin || 10.0,
+        likesCount: prof?.likesCount || 0,
+        isAiGenerated: prof?.isAiGenerated === 1,
+        photosCount: counts?.photos || 0,
+        videosCount: counts?.videos || 0,
+        isSubscriber: subSet.has(creator.id),
+      };
+    });
   }
 
   return (

@@ -32,7 +32,12 @@ import {
   type KomestibleDeckCard,
   type LikeQuotaInfo,
 } from "@/actions/komestible";
-import { COUNTRIES, USER_GENDERS } from "@/lib/countries";
+import {
+  COUNTRIES,
+  IDENTITY_GENDERS,
+  getUserGenderMeta,
+  type IdentityGenderValue,
+} from "@/lib/countries";
 import { uploadFileToR2, cloneFileIntoMemory } from "@/lib/uploadClient";
 
 export interface MyKomestiblePhotoItem {
@@ -52,7 +57,8 @@ interface Props {
     id: string;
     username: string;
     role: string;
-    gender: string | null;
+    gender: IdentityGenderValue | null;
+    interestedIn: IdentityGenderValue[];
     country: string;
   };
   initialQuota: LikeQuotaInfo;
@@ -78,16 +84,31 @@ export default function KomestibleHub({
   const [myPhotos, setMyPhotos] = useState<MyKomestiblePhotoItem[]>(initialMyPhotos);
   const [matchesCount, setMatchesCount] = useState(initialMatchesCount);
 
-  // Onboarding de género/país si no está definido todavía
-  const [needsIdentity, setNeedsIdentity] = useState(!currentUser.gender);
-  const [idGender, setIdGender] = useState<string>(currentUser.gender || "HOMBRE");
+  // Onboarding / edición de identidad e intereses estilo Badoo
+  const [needsIdentity, setNeedsIdentity] = useState(
+    !currentUser.gender || currentUser.interestedIn.length === 0
+  );
+  const [editingPrefs, setEditingPrefs] = useState(false);
+  const [idGender, setIdGender] = useState<IdentityGenderValue | "">(
+    currentUser.gender || ""
+  );
+  const [idInterestedIn, setIdInterestedIn] = useState<IdentityGenderValue[]>(
+    currentUser.interestedIn
+  );
   const [idCountry, setIdCountry] = useState<string>(currentUser.country || "VE");
+  const [identityError, setIdentityError] = useState<string | null>(null);
   const [savingIdentity, setSavingIdentity] = useState(false);
 
-  // Filtros de descubrimiento
-  const [genderFilter, setGenderFilter] = useState<string>("ALL");
+  // Filtros de descubrimiento (por defecto usa las preferencias guardadas estilo Badoo)
+  const [genderFilter, setGenderFilter] = useState<string>("PREFERENCES");
   const [countryFilter, setCountryFilter] = useState<string>("ALL");
   const [loadingDeck, setLoadingDeck] = useState(false);
+
+  const toggleIdInterest = (val: IdentityGenderValue) => {
+    setIdInterestedIn((prev) =>
+      prev.includes(val) ? prev.filter((item) => item !== val) : [...prev, val]
+    );
+  };
 
   // Subida de fotos en KOMESTIBLE
   const [caption, setCaption] = useState("");
@@ -109,14 +130,36 @@ export default function KomestibleHub({
 
   const handleSaveIdentity = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIdentityError(null);
+    if (!idGender) {
+      setIdentityError("Selecciona primero si eres Hombre, Mujer, Pareja o Transgénero.");
+      return;
+    }
+    if (idInterestedIn.length === 0) {
+      setIdentityError(
+        "Selecciona al menos una opción de a quién estás interesado/a en conocer."
+      );
+      return;
+    }
+
     setSavingIdentity(true);
     const fd = new FormData();
     fd.set("gender", idGender);
     fd.set("country", idCountry);
+    for (const item of idInterestedIn) {
+      fd.append("interestedIn", item);
+    }
+
     try {
       const res = await updateMyKomestibleIdentityAction(fd);
+      if (res.error) {
+        setIdentityError(res.error);
+        setSavingIdentity(false);
+        return;
+      }
       if (res.success) {
         setNeedsIdentity(false);
+        setEditingPrefs(false);
         window.location.reload();
       }
     } finally {
@@ -331,59 +374,127 @@ export default function KomestibleHub({
         </div>
       </div>
 
-      {/* ONBOARDING RÁPIDO SI EL USUARIO NO TIENE GÉNERO REGISTRADO */}
-      {needsIdentity && (
+      {/* ONBOARDING / EDICIÓN DE IDENTIDAD E INTERESES ESTILO BADOO */}
+      {(needsIdentity || editingPrefs) && (
         <form
           onSubmit={handleSaveIdentity}
-          className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 shadow-xl space-y-4"
+          className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 shadow-xl space-y-5"
         >
-          <div className="flex items-center gap-2 text-amber-300 text-sm font-black">
-            <UserCheck className="w-5 h-5" />
-            Completa tu perfil antes de empezar en KOMESTIBLE
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-amber-300 text-sm font-black">
+              <UserCheck className="w-5 h-5" />
+              {needsIdentity
+                ? "Completa tu perfil básico antes de empezar en KOMESTIBLE"
+                : "Editar tu identidad y a quién te interesa conocer"}
+            </div>
+            {editingPrefs && !needsIdentity && (
+              <button
+                type="button"
+                onClick={() => setEditingPrefs(false)}
+                className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+              >
+                Cerrar
+              </button>
+            )}
           </div>
-          <p className="text-xs text-slate-400">
-            Indica cómo te identificas y tu país para mostrar tu tarjeta correctamente y aplicar las reglas de interacción.
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Cuéntanos si eres <strong>Hombre, Mujer, Pareja o Transgénero</strong> y a quién estás interesado/a en conocer. Usaremos estas preferencias para mostrarte personas compatibles en KOMESTIBLE.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Me identifico como
-              </label>
-              <select
-                value={idGender}
-                onChange={(e) => setIdGender(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white"
-              >
-                {USER_GENDERS.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
+
+          {identityError && (
+            <div className="p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <span>{identityError}</span>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                País
-              </label>
-              <select
-                value={idCountry}
-                onChange={(e) => setIdCountry(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white"
-              >
-                {COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.flag} {c.name}
-                  </option>
-                ))}
-              </select>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-white mb-2">
+              1. ¿Qué eres? <span className="text-rose-400">*</span>
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {IDENTITY_GENDERS.map((g) => (
+                <button
+                  key={g.value}
+                  type="button"
+                  onClick={() => setIdGender(g.value)}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-black border transition cursor-pointer ${
+                    idGender === g.value
+                      ? "bg-rose-600 text-white border-rose-400 shadow-md shadow-rose-600/30"
+                      : "bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  {g.label}
+                </button>
+              ))}
             </div>
           </div>
+
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Flame className="w-4 h-4 text-rose-500 fill-rose-500" />
+                2. ¿A quién estás interesado/a en conocer? <span className="text-rose-400">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setIdInterestedIn(
+                    idInterestedIn.length === IDENTITY_GENDERS.length
+                      ? []
+                      : IDENTITY_GENDERS.map((g) => g.value)
+                  )
+                }
+                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer"
+              >
+                {idInterestedIn.length === IDENTITY_GENDERS.length ? "Limpiar" : "Todos"}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {IDENTITY_GENDERS.map((g) => {
+                const active = idInterestedIn.includes(g.value);
+                return (
+                  <button
+                    key={g.value}
+                    type="button"
+                    onClick={() => toggleIdInterest(g.value)}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-black border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      active
+                        ? "bg-gradient-to-r from-rose-600 to-pink-600 text-white border-rose-400 shadow-md shadow-rose-600/25"
+                        : "bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700"
+                    }`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${active ? "fill-white" : ""}`} />
+                    <span>{g.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="max-w-xs">
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              País
+            </label>
+            <select
+              value={idCountry}
+              onChange={(e) => setIdCountry(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white"
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.flag} {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="submit"
             disabled={savingIdentity}
-            className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black transition"
+            className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition shadow-lg shadow-rose-600/30 cursor-pointer disabled:opacity-50"
           >
-            {savingIdentity ? "Guardando..." : "Guardar y Entrar a KOMESTIBLE"}
+            {savingIdentity ? "Guardando..." : "Guardar y Ver Perfiles Compatibles"}
           </button>
         </form>
       )}
@@ -391,39 +502,68 @@ export default function KomestibleHub({
       {/* PESTAÑA 1: SWIPE CARD STACK */}
       {!needsIdentity && activeTab === "discover" && (
         <div className="space-y-5">
-          {/* Barra de Filtros */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-              <Filter className="w-4 h-4 text-rose-400" />
-              <span>Filtrar Discovery Deck:</span>
+          {/* Barra de Preferencias Activas y Filtros */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-slate-400">Tu perfil:</span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-950 border border-slate-700 text-white font-bold text-[11px]">
+                  {getUserGenderMeta(currentUser.gender).label}
+                </span>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-400">Buscas conocer:</span>
+                {currentUser.interestedIn.map((pref) => (
+                  <span
+                    key={pref}
+                    className="px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-200 font-bold text-[11px]"
+                  >
+                    {getUserGenderMeta(pref).label}
+                  </span>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPrefs((v) => !v)}
+                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer"
+              >
+                Cambiar mis preferencias
+              </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={genderFilter}
-                onChange={(e) => applyFilters(e.target.value, countryFilter)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:border-rose-500 focus:outline-hidden"
-              >
-                <option value="ALL">Todos los géneros</option>
-                {USER_GENDERS.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    {g.plural}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                <Filter className="w-4 h-4 text-rose-400" />
+                <span>Filtrar Discovery Deck:</span>
+              </div>
 
-              <select
-                value={countryFilter}
-                onChange={(e) => applyFilters(genderFilter, e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:border-rose-500 focus:outline-hidden"
-              >
-                <option value="ALL">Todos los países</option>
-                {COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.flag} {c.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={genderFilter}
+                  onChange={(e) => applyFilters(e.target.value, countryFilter)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:border-rose-500 focus:outline-hidden"
+                >
+                  <option value="PREFERENCES">✨ Según mis preferencias (Compatibles)</option>
+                  <option value="ALL">Explorar todos los perfiles</option>
+                  {IDENTITY_GENDERS.map((g) => (
+                    <option key={g.value} value={g.value}>
+                      Solo {g.plural}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={countryFilter}
+                  onChange={(e) => applyFilters(genderFilter, e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:border-rose-500 focus:outline-hidden"
+                >
+                  <option value="ALL">Todos los países</option>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

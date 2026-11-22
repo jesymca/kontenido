@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import AntiDownloadProtection from "@/components/AntiDownloadProtection";
+import NavigationProgress from "@/components/NavigationProgress";
 import { auth } from "@/auth";
 
 const defaultBaseUrl = process.env.NEXTAUTH_URL || "https://kontenido.online";
@@ -120,6 +121,9 @@ export default async function RootLayout({
   return (
     <html lang="es">
       <body className="bg-slate-950 text-slate-100 antialiased min-h-screen flex flex-col">
+        {/* Barra superior de progreso instantáneo al cambiar de sección */}
+        <NavigationProgress />
+
         {/* Sistema de protección contra descargas no autorizadas */}
         <AntiDownloadProtection isConsumer={isConsumer} canDownload={canDownload} />
 

@@ -13,7 +13,7 @@ import { ensureChatSchema } from "@/lib/db/initChat";
 import { ensureInteractionsSchema } from "@/lib/db/initInteractions";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { CREATOR_CATEGORIES, getCreatorCategoryMeta } from "@/lib/creatorCategories";
-import { getCountryMeta } from "@/lib/countries";
+import { getCountryMeta, normalizeGenderValue } from "@/lib/countries";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import UserLevelBadge from "@/components/UserLevelBadge";
 import {
@@ -75,66 +75,80 @@ async function enrichCreatorCards(
   rawRows: RawCreatorRow[],
   favoritesCountMap: Map<string, number>
 ): Promise<EnrichedCreatorCard[]> {
-  return Promise.all(
-    rawRows.map(async (c) => {
-      let photos = 0;
-      let videos = 0;
-      let agencyBadgeText: string | null = null;
-      let agencyBadgeColor: string | null = null;
-      try {
-        const [mediaCounts, agencyLink] = await Promise.all([
-          db
-            .select({
-              type: mediaAssets.type,
-              count: sql<number>`count(*)`,
-            })
-            .from(mediaAssets)
-            .where(
-              and(eq(mediaAssets.creatorId, c.id), eq(mediaAssets.isDeleted, 0))
-            )
-            .groupBy(mediaAssets.type),
-          db.query.agencyCreators.findFirst({
-            where: and(
-              eq(agencyCreators.creatorId, c.id),
-              eq(agencyCreators.status, "ACCEPTED")
-            ),
-            with: {
-              agency: true,
-            },
-          }),
-        ]);
+  if (rawRows.length === 0) return [];
 
-        for (const m of mediaCounts) {
-          if (m.type === "IMAGE") photos = Number(m.count);
-          if (m.type === "VIDEO") videos = Number(m.count);
-        }
+  const creatorIds = Array.from(new Set(rawRows.map((r) => r.id)));
+  const mediaCountMap = new Map<string, { photos: number; videos: number }>();
+  const agencyBadgeMap = new Map<string, { text: string; color: string }>();
 
-        if (
-          agencyLink?.agency &&
-          agencyLink.agency.status === "ACTIVE" &&
-          agencyLink.agency.showBadge === 1
-        ) {
-          agencyBadgeText = agencyLink.agency.badgeText || agencyLink.agency.name;
-          agencyBadgeColor = agencyLink.agency.badgeColor;
-        }
-      } catch {
-        // Fallback seguro
+  try {
+    // 2 consultas agrupadas en paralelo para TODOS los perfiles (en vez de N+1 = hasta 96 consultas)
+    const [mediaRows, agencyLinks] = await Promise.all([
+      db
+        .select({
+          creatorId: mediaAssets.creatorId,
+          type: mediaAssets.type,
+          count: sql<number>`count(*)`,
+        })
+        .from(mediaAssets)
+        .where(
+          and(
+            inArray(mediaAssets.creatorId, creatorIds),
+            eq(mediaAssets.isDeleted, 0)
+          )
+        )
+        .groupBy(mediaAssets.creatorId, mediaAssets.type),
+      db.query.agencyCreators.findMany({
+        where: and(
+          inArray(agencyCreators.creatorId, creatorIds),
+          eq(agencyCreators.status, "ACCEPTED")
+        ),
+        with: {
+          agency: true,
+        },
+      }),
+    ]);
+
+    for (const m of mediaRows) {
+      const entry = mediaCountMap.get(m.creatorId) || { photos: 0, videos: 0 };
+      if (m.type === "IMAGE") entry.photos = Number(m.count || 0);
+      if (m.type === "VIDEO") entry.videos = Number(m.count || 0);
+      mediaCountMap.set(m.creatorId, entry);
+    }
+
+    for (const link of agencyLinks) {
+      if (
+        !agencyBadgeMap.has(link.creatorId) &&
+        link.agency &&
+        link.agency.status === "ACTIVE" &&
+        link.agency.showBadge === 1
+      ) {
+        agencyBadgeMap.set(link.creatorId, {
+          text: link.agency.badgeText || link.agency.name,
+          color: link.agency.badgeColor,
+        });
       }
+    }
+  } catch {
+    // Fallback seguro
+  }
 
-      return {
-        ...c,
-        country: c.country || "VE",
-        creatorCategory: c.creatorCategory || "MUJER",
-        likesCount: c.likesCount || 0,
-        favoritesCount: favoritesCountMap.get(c.id) || 0,
-        isAiGenerated: c.isAiGenerated || 0,
-        photosCount: photos,
-        videosCount: videos,
-        agencyBadgeText,
-        agencyBadgeColor,
-      };
-    })
-  );
+  return rawRows.map((c) => {
+    const media = mediaCountMap.get(c.id);
+    const badge = agencyBadgeMap.get(c.id);
+    return {
+      ...c,
+      country: c.country || "VE",
+      creatorCategory: c.creatorCategory || "MUJER",
+      likesCount: c.likesCount || 0,
+      favoritesCount: favoritesCountMap.get(c.id) || 0,
+      isAiGenerated: c.isAiGenerated || 0,
+      photosCount: media?.photos || 0,
+      videosCount: media?.videos || 0,
+      agencyBadgeText: badge?.text || null,
+      agencyBadgeColor: badge?.color || null,
+    };
+  });
 }
 
 function CreatorDirectoryCard({
@@ -288,17 +302,26 @@ function CreatorDirectoryCard({
  * - Acceso destacado a la sección gratuita KOMESTIBLE & KOINCIDEN
  */
 export default async function HomePage({ searchParams }: HomePageProps) {
-  await ensureChatSchema();
-  await ensureInteractionsSchema();
-  await ensureKomestibleSchema();
+  await Promise.all([
+    ensureChatSchema(),
+    ensureInteractionsSchema(),
+    ensureKomestibleSchema(),
+  ]);
 
-  const session = await auth();
-  const resolvedSearch = searchParams ? await searchParams : {};
-  const activeCategory = CREATOR_CATEGORIES.some(
-    (c) => c.value === resolvedSearch?.categoria
-  )
-    ? resolvedSearch.categoria!
-    : null;
+  const [session, resolvedSearch] = await Promise.all([
+    auth(),
+    searchParams
+      ? searchParams
+      : Promise.resolve({} as { categoria?: string; pagina?: string }),
+  ]);
+  const normalizedCategory = normalizeGenderValue(resolvedSearch?.categoria);
+  const activeCategory = normalizedCategory || null;
+  const categoryValues =
+    activeCategory === "TRANSGENERO"
+      ? (["TRANSGENERO", "TRANSEXUAL"] as const)
+      : activeCategory
+      ? ([activeCategory] as const)
+      : null;
 
   const pageSize = 48;
   const requestedPage = Math.max(1, parseInt(resolvedSearch?.pagina || "1", 10) || 1);
@@ -309,8 +332,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   let filteredTotalCount = 0;
 
   try {
-    // 1. Contar total global de registros de creadores y contar favoritos por creadora
-    const [globalCountRes, filteredCountRes, favAggRows] = await Promise.all([
+    const categoryWhere = categoryValues
+      ? and(
+          eq(users.role, "CREATOR"),
+          inArray(profiles.creatorCategory, [...categoryValues])
+        )
+      : eq(users.role, "CREATOR");
+
+    const offset = (requestedPage - 1) * pageSize;
+
+    // 1. Ejecutar conteos, agregados y lista paginada de creadores EN PARALELO
+    const [globalCountRes, filteredCountRes, favAggRows, rawCreators] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(users)
@@ -320,14 +352,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         .select({ count: sql<number>`count(*)` })
         .from(users)
         .innerJoin(profiles, eq(users.id, profiles.userId))
-        .where(
-          activeCategory
-            ? and(
-                eq(users.role, "CREATOR"),
-                eq(profiles.creatorCategory, activeCategory as any)
-              )
-            : eq(users.role, "CREATOR")
-        ),
+        .where(categoryWhere),
       db
         .select({
           creatorId: profileFavorites.creatorId,
@@ -336,6 +361,27 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         .from(profileFavorites)
         .groupBy(profileFavorites.creatorId)
         .orderBy(desc(sql`count(*)`)),
+      db
+        .select({
+          id: users.id,
+          username: users.username,
+          level: users.level,
+          country: users.country,
+          displayName: profiles.displayName,
+          bio: profiles.bio,
+          avatarKey: profiles.avatarKey,
+          bannerKey: profiles.bannerKey,
+          priceKoin: profiles.subscriptionPriceKoin,
+          creatorCategory: profiles.creatorCategory,
+          likesCount: profiles.likesCount,
+          isAiGenerated: profiles.isAiGenerated,
+        })
+        .from(users)
+        .innerJoin(profiles, eq(users.id, profiles.userId))
+        .where(categoryWhere)
+        .orderBy(desc(users.createdAt), desc(profiles.createdAt))
+        .limit(pageSize)
+        .offset(offset),
     ]);
 
     totalCreatorRecords = Number(globalCountRes[0]?.count || 0);
@@ -345,37 +391,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     for (const row of favAggRows) {
       favoritesCountMap.set(row.creatorId, Number(row.count || 0));
     }
-
-    // 2. Obtener perfiles ordenados desde el ÚLTIMO hasta el PRIMERO
-    const offset = (requestedPage - 1) * pageSize;
-    const rawCreators = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        level: users.level,
-        country: users.country,
-        displayName: profiles.displayName,
-        bio: profiles.bio,
-        avatarKey: profiles.avatarKey,
-        bannerKey: profiles.bannerKey,
-        priceKoin: profiles.subscriptionPriceKoin,
-        creatorCategory: profiles.creatorCategory,
-        likesCount: profiles.likesCount,
-        isAiGenerated: profiles.isAiGenerated,
-      })
-      .from(users)
-      .innerJoin(profiles, eq(users.id, profiles.userId))
-      .where(
-        activeCategory
-          ? and(
-              eq(users.role, "CREATOR"),
-              eq(profiles.creatorCategory, activeCategory as any)
-            )
-          : eq(users.role, "CREATOR")
-      )
-      .orderBy(desc(users.createdAt), desc(profiles.createdAt))
-      .limit(pageSize)
-      .offset(offset);
 
     creatorsList = await enrichCreatorCards(rawCreators, favoritesCountMap);
 

@@ -5,10 +5,11 @@ import CreatorPanelNav from "./CreatorPanelNav";
 import ConsumerPanelNav, { type SubscribedCreatorItem } from "./ConsumerPanelNav";
 import { Coins, Shield, Sparkles, LayoutDashboard, LogOut, User, DollarSign, Flame, MessageCircleHeart } from "lucide-react";
 import { db } from "@/lib/db";
-import { wallets, vipMemberships, users, subscriptions, profiles, komestibleMatches } from "@/lib/db/schema";
+import { wallets, vipMemberships, subscriptions, profiles, komestibleMatches } from "@/lib/db/schema";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
+import { getCurrentDbUser } from "@/lib/session";
 import { isVenezuelanUser } from "@/lib/countries";
-import { eq, or, desc, and } from "drizzle-orm";
+import { eq, or, desc, and, inArray } from "drizzle-orm";
 import Image from "next/image";
 
 /**
@@ -36,17 +37,7 @@ export default async function Navbar() {
 
   if (sessionUser) {
     try {
-      const dbUser = sessionUser.email
-        ? await db.query.users.findFirst({
-            where: sessionUser.id
-              ? or(eq(users.id, sessionUser.id), eq(users.email, sessionUser.email.toLowerCase().trim()))
-              : eq(users.email, sessionUser.email.toLowerCase().trim()),
-          })
-        : sessionUser.id
-        ? await db.query.users.findFirst({
-            where: eq(users.id, sessionUser.id),
-          })
-        : null;
+      const dbUser = await getCurrentDbUser();
 
       const targetUserId = dbUser?.id || sessionUser.id;
       if (dbUser) {
@@ -57,67 +48,76 @@ export default async function Navbar() {
         effectiveCountry = dbUser.country || "VE";
       }
 
-      if (targetUserId) {
-        try {
-          koincidenCount = await db.$count(
-            komestibleMatches,
-            and(
-              eq(komestibleMatches.status, "ACTIVE"),
-              or(
-                eq(komestibleMatches.userAId, targetUserId),
-                eq(komestibleMatches.userBId, targetUserId)
-              )
-            )
-          );
-        } catch {
-          koincidenCount = 0;
-        }
-      }
-
-      const userWallet = await db.query.wallets.findFirst({
-        where: eq(wallets.userId, targetUserId),
-      });
-      balanceKoin = userWallet?.balanceKoin || 0;
-
       const vipId = dbUser?.vipMembershipId ?? sessionUser.vipMembershipId;
-      if (vipId) {
-        const membership = await db.query.vipMemberships.findFirst({
-          where: eq(vipMemberships.id, vipId),
-        });
-        if (membership) {
-          vipBadgeText = membership.badgeText;
-          vipBadgeColor = membership.badgeColor;
-        }
+
+      // Ejecutar en paralelo todas las consultas del Navbar (en lugar de secuencialmente)
+      const [matchesTotal, userWallet, membership, subs] = await Promise.all([
+        targetUserId
+          ? (async () => {
+              try {
+                return await db.$count(
+                  komestibleMatches,
+                  and(
+                    eq(komestibleMatches.status, "ACTIVE"),
+                    or(
+                      eq(komestibleMatches.userAId, targetUserId),
+                      eq(komestibleMatches.userBId, targetUserId)
+                    )
+                  )
+                );
+              } catch {
+                return 0;
+              }
+            })()
+          : Promise.resolve(0),
+        targetUserId
+          ? db.query.wallets.findFirst({ where: eq(wallets.userId, targetUserId) })
+          : Promise.resolve(null),
+        vipId
+          ? db.query.vipMemberships.findFirst({ where: eq(vipMemberships.id, vipId) })
+          : Promise.resolve(null),
+        effectiveRole === "CONSUMER" && targetUserId
+          ? db.query.subscriptions.findMany({
+              where: eq(subscriptions.subscriberId, targetUserId),
+              orderBy: [desc(subscriptions.startsAt)],
+              with: { creator: true },
+            })
+          : Promise.resolve([]),
+      ]);
+
+      koincidenCount = matchesTotal;
+      balanceKoin = userWallet?.balanceKoin || 0;
+      if (membership) {
+        vipBadgeText = membership.badgeText;
+        vipBadgeColor = membership.badgeColor;
       }
 
-      // Si es CONSUMIDOR, cargar los perfiles a los que está suscrito para el Navbar rápido
-      if (effectiveRole === "CONSUMER" && targetUserId) {
-        const subs = await db.query.subscriptions.findMany({
-          where: eq(subscriptions.subscriberId, targetUserId),
-          orderBy: [desc(subscriptions.startsAt)],
-          with: {
-            creator: true,
-          },
-        });
-        if (subs.length > 0) {
-          const allProfiles = await db.query.profiles.findMany();
-          const profileMap = new Map(allProfiles.map((p) => [p.userId, p]));
-          const nowIso = new Date().toISOString();
+      // Cargar únicamente los perfiles de los creadores a los que está suscrito (sin full-table scan)
+      if (subs.length > 0) {
+        const nowIso = new Date().toISOString();
+        const activeSubs = subs.filter(
+          (s) => s.creator && s.status === "ACTIVE" && s.endsAt >= nowIso
+        );
+        const creatorIds = Array.from(new Set(activeSubs.map((s) => s.creatorId)));
+
+        if (creatorIds.length > 0) {
+          const subscribedProfiles = await db.query.profiles.findMany({
+            where: inArray(profiles.userId, creatorIds),
+          });
+          const profileMap = new Map(subscribedProfiles.map((p) => [p.userId, p]));
           const seenCreators = new Set<string>();
 
-          for (const s of subs) {
+          for (const s of activeSubs) {
             if (!s.creator || seenCreators.has(s.creatorId)) continue;
-            if (s.status === "ACTIVE" && s.endsAt >= nowIso) {
-              seenCreators.add(s.creatorId);
-              const prof = profileMap.get(s.creatorId);
-              consumerSubscriptions.push({
-                creatorId: s.creatorId,
-                username: s.creator.username,
-                displayName: prof?.displayName || s.creator.username,
-                avatarUrl: prof?.avatarKey ? `/api/media/${prof.avatarKey}` : null,
-                endsAt: s.endsAt,
-              });
-            }
+            seenCreators.add(s.creatorId);
+            const prof = profileMap.get(s.creatorId);
+            consumerSubscriptions.push({
+              creatorId: s.creatorId,
+              username: s.creator.username,
+              displayName: prof?.displayName || s.creator.username,
+              avatarUrl: prof?.avatarKey ? `/api/media/${prof.avatarKey}` : null,
+              endsAt: s.endsAt,
+            });
           }
         }
       }

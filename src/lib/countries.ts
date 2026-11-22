@@ -48,25 +48,31 @@ export function getCountryMeta(code?: string | null): CountryOption {
   );
 }
 
-export type UserGenderValue = "MUJER" | "HOMBRE" | "PAREJA" | "TRANSEXUAL" | "OTRO";
+/**
+ * Identidades principales para perfil básico y emparejamiento KOMESTIBLE (estilo Badoo):
+ * HOMBRE, MUJER, PAREJA, TRANSGENERO
+ * (Se mantiene retrocompatibilidad automática con valores históricos como TRANSEXUAL)
+ */
+export type IdentityGenderValue = "HOMBRE" | "MUJER" | "PAREJA" | "TRANSGENERO";
+export type UserGenderValue = IdentityGenderValue | "TRANSEXUAL" | "OTRO";
 
-export const USER_GENDERS: Array<{
-  value: UserGenderValue;
+export const IDENTITY_GENDERS: Array<{
+  value: IdentityGenderValue;
   label: string;
   plural: string;
   badgeClass: string;
 }> = [
   {
-    value: "MUJER",
-    label: "Mujer",
-    plural: "Mujeres",
-    badgeClass: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-  },
-  {
     value: "HOMBRE",
     label: "Hombre",
     plural: "Hombres",
     badgeClass: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+  },
+  {
+    value: "MUJER",
+    label: "Mujer",
+    plural: "Mujeres",
+    badgeClass: "bg-rose-500/15 text-rose-300 border-rose-500/30",
   },
   {
     value: "PAREJA",
@@ -75,21 +81,107 @@ export const USER_GENDERS: Array<{
     badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   },
   {
-    value: "TRANSEXUAL",
-    label: "Transexual",
-    plural: "Transexuales",
+    value: "TRANSGENERO",
+    label: "Transgénero",
+    plural: "Transgéneros",
     badgeClass: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30",
-  },
-  {
-    value: "OTRO",
-    label: "Otro",
-    plural: "Otros",
-    badgeClass: "bg-slate-500/15 text-slate-300 border-slate-500/30",
   },
 ];
 
+// Alias exportado para compatibilidad con componentes existentes
+export const USER_GENDERS = IDENTITY_GENDERS;
+
+/**
+ * Normaliza un valor de género/identidad proveniente de BD o formularios,
+ * mapeando valores legacy como TRANSEXUAL -> TRANSGENERO.
+ */
+export function normalizeGenderValue(value?: string | null): IdentityGenderValue | null {
+  if (!value) return null;
+  const upper = value
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (upper === "HOMBRE") return "HOMBRE";
+  if (upper === "MUJER") return "MUJER";
+  if (upper === "PAREJA") return "PAREJA";
+  if (upper === "TRANSGENERO" || upper === "TRANSEXUAL" || upper === "TRANS") {
+    return "TRANSGENERO";
+  }
+  return null;
+}
+
 export function getUserGenderMeta(value?: string | null) {
-  return USER_GENDERS.find((g) => g.value === value) || USER_GENDERS[4];
+  const normalized = normalizeGenderValue(value);
+  if (normalized) {
+    const found = IDENTITY_GENDERS.find((g) => g.value === normalized);
+    if (found) return found;
+  }
+  return {
+    value: "OTRO" as UserGenderValue,
+    label: "Sin definir",
+    plural: "Sin definir",
+    badgeClass: "bg-slate-500/15 text-slate-300 border-slate-500/30",
+  };
+}
+
+/**
+ * Parsea la columna users.interested_in (JSON array o texto separado por comas)
+ * devolviendo una lista deduplicada y normalizada de identidades de interés.
+ */
+export function parseInterestedIn(raw?: string | string[] | null): IdentityGenderValue[] {
+  if (!raw) return [];
+  let items: string[] = [];
+
+  if (Array.isArray(raw)) {
+    items = raw;
+  } else {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          items = parsed.map(String);
+        }
+      } catch {
+        items = trimmed.split(",");
+      }
+    } else {
+      items = trimmed.split(",");
+    }
+  }
+
+  const out: IdentityGenderValue[] = [];
+  for (const item of items) {
+    const norm = normalizeGenderValue(item);
+    if (norm && !out.includes(norm)) {
+      out.push(norm);
+    }
+  }
+  return out;
+}
+
+/**
+ * Serializa una lista de preferencias de interés a JSON limpio para guardar en BD.
+ */
+export function serializeInterestedIn(rawList: string[]): string | null {
+  const normalized = parseInterestedIn(rawList);
+  return normalized.length > 0 ? JSON.stringify(normalized) : null;
+}
+
+/**
+ * Comprueba si el género de un candidato coincide con una lista de intereses permitidos.
+ */
+export function matchesGenderPreference(
+  candidateGender: string | null | undefined,
+  allowedList: IdentityGenderValue[]
+): boolean {
+  if (allowedList.length === 0) return true;
+  const norm = normalizeGenderValue(candidateGender);
+  if (!norm) return false;
+  return allowedList.includes(norm);
 }
 
 export const USDT_NETWORKS = [

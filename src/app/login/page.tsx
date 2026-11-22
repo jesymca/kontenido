@@ -165,20 +165,26 @@ export default function LoginPage() {
 
         <div className="mt-6 pt-5 border-t border-slate-800 space-y-2.5 text-center">
           <p className="text-xs text-slate-400">
-            ¿Aún no tienes cuenta? Elige tu modo según lo que deseas hacer:
+            ¿Aún no tienes cuenta? Regístrate indicando qué eres en KONTENIDO:
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <Link
               href="/registro?rol=creador"
               className="px-3 py-2 rounded-xl bg-rose-600/15 border border-rose-500/40 text-rose-300 hover:bg-rose-600 hover:text-white text-xs font-bold transition"
             >
-              Crear para Vender (Creador/a)
+              Creador de Contenido
             </Link>
             <Link
               href="/registro?rol=consumidor"
               className="px-3 py-2 rounded-xl bg-sky-600/15 border border-sky-500/40 text-sky-300 hover:bg-sky-600 hover:text-white text-xs font-bold transition"
             >
-              Solo Ver Contenido (Consumidor)
+              Consumidor
+            </Link>
+            <Link
+              href="/registro?rol=agencia"
+              className="px-3 py-2 rounded-xl bg-indigo-600/15 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-600 hover:text-white text-xs font-bold transition"
+            >
+              Agencia
             </Link>
           </div>
         </div>

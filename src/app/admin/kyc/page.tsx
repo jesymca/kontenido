@@ -1,42 +1,67 @@
 import { db } from "@/lib/db";
-import { kycDocuments, users } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { kycDocuments, users, settings } from "@/lib/db/schema";
+import { eq, desc, inArray } from "drizzle-orm";
+import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import AdminKycReview from "@/components/AdminKycReview";
 import { FileCheck } from "lucide-react";
 import { getPresignedDownloadUrl, BUCKETS } from "@/lib/r2";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Vista de Revisión y Validación de Cédulas KYC (/admin/kyc)
+ * Soporta evaluación y aprobación automática de mayoría de edad (+18) al subir archivos
+ * y revisión manual para los casos que requieran verificación adicional.
  */
 export default async function AdminKycPage() {
-  const pendingDocs = await db.query.kycDocuments.findMany({
-    orderBy: [desc(kycDocuments.createdAt)],
-  });
+  await ensureKomestibleSchema();
 
-  const allUsers = await db.query.users.findMany();
-  const userMap = new Map(allUsers.map((u) => [u.id, u.username]));
+  const [allDocs, autoSettingRow] = await Promise.all([
+    db.query.kycDocuments.findMany({
+      orderBy: [desc(kycDocuments.createdAt)],
+    }),
+    db.query.settings.findFirst({
+      where: eq(settings.key, "kyc_auto_approve_enabled"),
+    }),
+  ]);
 
-  // Firmar URLs de las imágenes para el admin
-  const enrichedDocs = await Promise.all(
-    pendingDocs.map(async (doc) => {
-      let frontUrl = "";
-      let backUrl = "";
-      let selfieUrl = "";
-      try {
-        frontUrl = await getPresignedDownloadUrl(BUCKETS.PRIVATE, doc.frontKey, 900);
-        backUrl = await getPresignedDownloadUrl(BUCKETS.PRIVATE, doc.backKey, 900);
-        selfieUrl = await getPresignedDownloadUrl(BUCKETS.PRIVATE, doc.selfieKey, 900);
-      } catch (e) {
-        console.error("Error firmando KYC:", e);
-      }
+  const autoApproveEnabled = autoSettingRow ? autoSettingRow.value !== "0" : true;
+  const uniqueUserIds = Array.from(new Set(allDocs.map((d) => d.userId)));
 
-      return {
-        ...doc,
-        username: userMap.get(doc.userId) || "Desconocido",
-        urls: { frontUrl, backUrl, selfieUrl },
-      };
-    })
-  );
+  const [relatedUsers, signedUrlsList] = await Promise.all([
+    uniqueUserIds.length > 0
+      ? db
+          .select({ id: users.id, username: users.username })
+          .from(users)
+          .where(inArray(users.id, uniqueUserIds))
+      : Promise.resolve([]),
+    Promise.all(
+      allDocs.map(async (doc) => {
+        if (doc.frontKey === "admin_direct_verification") {
+          return { frontUrl: "", backUrl: "", selfieUrl: "" };
+        }
+        try {
+          const [frontUrl, backUrl, selfieUrl] = await Promise.all([
+            getPresignedDownloadUrl(BUCKETS.PRIVATE, doc.frontKey, 900),
+            getPresignedDownloadUrl(BUCKETS.PRIVATE, doc.backKey, 900),
+            getPresignedDownloadUrl(BUCKETS.PRIVATE, doc.selfieKey, 900),
+          ]);
+          return { frontUrl, backUrl, selfieUrl };
+        } catch (e) {
+          console.error("Error firmando KYC:", e);
+          return { frontUrl: "", backUrl: "", selfieUrl: "" };
+        }
+      })
+    ),
+  ]);
+
+  const userMap = new Map(relatedUsers.map((u) => [u.id, u.username]));
+
+  const enrichedDocs = allDocs.map((doc, idx) => ({
+    ...doc,
+    username: userMap.get(doc.userId) || "Desconocido",
+    urls: signedUrlsList[idx] || { frontUrl: "", backUrl: "", selfieUrl: "" },
+  }));
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -46,11 +71,14 @@ export default async function AdminKycPage() {
           Validación de Identidad y Mayoría de Edad (KYC)
         </h1>
         <p className="text-slate-400 text-xs sm:text-sm mt-1">
-          Compara visualmente la cédula venezolana (frente/reverso) y la selfie de la creadora para aprobar su activación.
+          El sistema evalúa automáticamente el documento y la mayoría de edad (+18) al momento de la carga y aprueba de inmediato cuando los datos son legibles. Aquí puedes supervisar los auto-aprobados y revisar manualmente los pendientes.
         </p>
       </div>
 
-      <AdminKycReview documents={enrichedDocs} />
+      <AdminKycReview
+        documents={enrichedDocs}
+        initialAutoApproveEnabled={autoApproveEnabled}
+      />
     </div>
   );
 }

@@ -522,24 +522,26 @@ export default async function PublicProfilePage({ params }: PageProps) {
                     <div className="p-4 sm:p-5">
                       <div className="relative rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center min-h-[300px]">
                         {isUnlocked && mediaUrl ? (
-                          <div className="relative w-full flex flex-col items-center">
-                            {firstMedia?.type === "VIDEO" ? (
-                              <video
-                                src={mediaUrl}
-                                controls
-                                controlsList={userCanDownload ? undefined : "nodownload"}
-                                className="w-full max-h-[550px] object-contain rounded-xl protected-content"
-                              />
-                            ) : (
-                              <img
-                                src={mediaUrl}
-                                alt={post.title}
-                                className="w-full max-h-[550px] object-contain rounded-xl protected-content"
-                              />
-                            )}
+                          <div className="w-full flex flex-col items-center">
+                            <div className="relative inline-flex max-w-full items-center justify-center rounded-xl overflow-hidden">
+                              {firstMedia?.type === "VIDEO" ? (
+                                <video
+                                  src={mediaUrl}
+                                  controls
+                                  controlsList={userCanDownload ? undefined : "nodownload"}
+                                  className="max-h-[550px] w-auto max-w-full object-contain rounded-xl protected-content"
+                                />
+                              ) : (
+                                <img
+                                  src={mediaUrl}
+                                  alt={post.title}
+                                  className="max-h-[550px] w-auto max-w-full object-contain rounded-xl protected-content"
+                                />
+                              )}
 
-                            {/* MARCA DE AGUA OFICIAL KONTENIDO SOBRE LA FOTO/VIDEO */}
-                            <MediaWatermark username={creator.username} />
+                              {/* MARCA DE AGUA OFICIAL KONTENIDO EN EL BORDE INFERIOR DERECHO */}
+                              <MediaWatermark username={creator.username} />
+                            </div>
 
                             {/* Botón de descarga: Exclusivo para usuarios VIP con permiso o Super Admin */}
                             {userCanDownload && (

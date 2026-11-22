@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { subscriptions, profiles } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -36,8 +36,14 @@ export default async function MisSuscripcionesPage() {
     },
   });
 
-  const allProfiles = await db.query.profiles.findMany();
-  const profileMap = new Map(allProfiles.map((p) => [p.userId, p]));
+  const creatorIds = Array.from(new Set(userSubs.map((s) => s.creatorId)));
+  const relevantProfiles =
+    creatorIds.length > 0
+      ? await db.query.profiles.findMany({
+          where: inArray(profiles.userId, creatorIds),
+        })
+      : [];
+  const profileMap = new Map(relevantProfiles.map((p) => [p.userId, p]));
 
   const nowIso = new Date().toISOString();
 

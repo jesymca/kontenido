@@ -29,7 +29,8 @@ export const users = sqliteTable("users", {
   suspensionReason: text("suspension_reason"), // Motivo si el usuario fue suspendido (ej: intento de descarga no autorizada)
   image: text("image"), // Imagen externa opcional (ej: avatar de Google)
   country: text("country").notNull().default("VE"), // Código de país ISO-2 ('VE' para Venezuela, o país internacional -> solo USDT)
-  gender: text("gender", { enum: ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL", "OTRO"] }), // Género declarado al registrarse (usado para KOMESTIBLE / límite de likes a HOMBRES)
+  gender: text("gender", { enum: ["HOMBRE", "MUJER", "PAREJA", "TRANSGENERO", "TRANSEXUAL", "OTRO"] }), // Identidad declarada en el perfil básico (usado para KOMESTIBLE / límite de likes a HOMBRES)
+  interestedIn: text("interested_in"), // JSON array de preferencias de interés para KOMESTIBLE (ej: '["MUJER","PAREJA"]')
   komestibleBonusLikes: integer("komestible_bonus_likes").notNull().default(0), // Likes adicionales otorgados por SUPER_ADMIN en KOMESTIBLE
   createdAt: text("created_at").notNull(), // Fecha y hora de creación ISO
   updatedAt: text("updated_at").notNull(), // Fecha y hora de última actualización ISO
@@ -52,10 +53,10 @@ export const profiles = sqliteTable("profiles", {
   chatPriceKoin: real("chat_price_koin").notNull().default(5.0), // Tarifa en KOIN para que compradores usen el chat
   chatDurationHours: integer("chat_duration_hours").notNull().default(168), // Duración en horas del pase de chat (168h = 7 días)
   creatorCategory: text("creator_category", {
-    enum: ["MUJER", "HOMBRE", "PAREJA", "TRANSEXUAL"],
+    enum: ["MUJER", "HOMBRE", "PAREJA", "TRANSGENERO", "TRANSEXUAL"],
   })
     .notNull()
-    .default("MUJER"), // Categoría de la creadora: Mujer, Hombre, Pareja, Transexual
+    .default("MUJER"), // Categoría de la creadora: Mujer, Hombre, Pareja, Transgénero
   likesCount: integer("likes_count").notNull().default(0), // Conteo de Me Gusta (Corazones) para algoritmo de posicionamiento
   isAiGenerated: integer("is_ai_generated").notNull().default(0), // 1 si el contenido del perfil es generado con Inteligencia Artificial
   isPublished: integer("is_published").notNull().default(0), // Si el perfil está visible públicamente (1) o borrador (0)
@@ -463,6 +464,9 @@ export const kycDocuments = sqliteTable("kyc_documents", {
   status: text("status", { enum: ["PENDING", "APPROVED", "REJECTED"] })
     .notNull()
     .default("PENDING"),
+  verificationMode: text("verification_mode", { enum: ["AUTO", "MANUAL"] }), // AUTO si fue aprobado automáticamente al detectar +18, MANUAL si lo revisó SUPER_ADMIN
+  autoCheckSummary: text("auto_check_summary"), // Resumen técnico de la evaluación automática al subir archivos
+  ocrConfidence: real("ocr_confidence"), // Confianza del OCR (0-100) al leer el documento
   rejectionReason: text("rejection_reason"),
   reviewerId: text("reviewer_id").references(() => users.id),
   reviewedAt: text("reviewed_at"),

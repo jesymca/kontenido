@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { reviewKycAction } from "@/actions/admin";
+import { reviewKycAction, toggleKycAutoApproveAction } from "@/actions/admin";
 import {
   Check,
   X,
@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Eye,
   Sparkles,
+  Zap,
 } from "lucide-react";
 
 interface KycItem {
@@ -31,6 +32,9 @@ interface KycItem {
   extractedBirthDate: string | null;
   ageVerified: number;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  verificationMode?: "AUTO" | "MANUAL" | null;
+  autoCheckSummary?: string | null;
+  ocrConfidence?: number | null;
   rejectionReason?: string | null;
   createdAt: string;
   urls: {
@@ -42,6 +46,7 @@ interface KycItem {
 
 interface Props {
   documents: KycItem[];
+  initialAutoApproveEnabled?: boolean;
 }
 
 const REJECTION_PRESETS = [
@@ -52,10 +57,20 @@ const REJECTION_PRESETS = [
   "Falta cara frontal o reverso nítido",
 ];
 
-export default function AdminKycReview({ documents }: Props) {
+export default function AdminKycReview({
+  documents,
+  initialAutoApproveEnabled = true,
+}: Props) {
   const router = useRouter();
   const [docs, setDocs] = useState<KycItem[]>(documents);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [autoApproveEnabled, setAutoApproveEnabled] = useState<boolean>(
+    initialAutoApproveEnabled
+  );
+  const [togglingAuto, setTogglingAuto] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<
+    "ALL" | "PENDING" | "AUTO_APPROVED" | "APPROVED" | "REJECTED"
+  >("ALL");
 
   // Estado de notificación in-app (sin alert nativo)
   const [feedback, setFeedback] = useState<{
@@ -258,8 +273,130 @@ export default function AdminKycReview({ documents }: Props) {
     }
   };
 
+  const handleToggleAutoApprove = async () => {
+    const nextValue = !autoApproveEnabled;
+    setTogglingAuto(true);
+    setFeedback(null);
+    try {
+      const res = await toggleKycAutoApproveAction(nextValue);
+      if (res?.success) {
+        setAutoApproveEnabled(nextValue);
+        setFeedback({
+          type: "success",
+          message: nextValue
+            ? "Aprobación automática de mayoría de edad (+18) ACTIVADA. Los documentos legibles +18 se aprobarán al instante."
+            : "Aprobación automática PAUSADA. Todas las solicitudes pasarán a revisión manual.",
+        });
+      }
+    } catch {
+      setFeedback({
+        type: "error",
+        message: "No se pudo actualizar la configuración de aprobación automática.",
+      });
+    } finally {
+      setTogglingAuto(false);
+    }
+  };
+
+  const pendingCount = docs.filter((d) => d.status === "PENDING").length;
+  const autoApprovedCount = docs.filter(
+    (d) => d.status === "APPROVED" && d.verificationMode === "AUTO"
+  ).length;
+  const approvedCount = docs.filter((d) => d.status === "APPROVED").length;
+  const rejectedCount = docs.filter((d) => d.status === "REJECTED").length;
+
+  const filteredDocs = docs.filter((doc) => {
+    if (statusFilter === "PENDING") return doc.status === "PENDING";
+    if (statusFilter === "AUTO_APPROVED") {
+      return doc.status === "APPROVED" && doc.verificationMode === "AUTO";
+    }
+    if (statusFilter === "APPROVED") return doc.status === "APPROVED";
+    if (statusFilter === "REJECTED") return doc.status === "REJECTED";
+    return true;
+  });
+
   return (
     <div className="space-y-6">
+      {/* Control de Aprobación Automática (+18) y Filtros */}
+      <div className="p-5 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-3xl shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                autoApproveEnabled
+                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
+                  : "bg-slate-800 border-slate-700 text-slate-400"
+              }`}
+            >
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-black text-white">
+                  Aprobación Automática de Mayoría de Edad (+18)
+                </h2>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                    autoApproveEnabled
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-slate-800 text-slate-400 border border-slate-700"
+                  }`}
+                >
+                  {autoApproveEnabled ? "Activa en la plataforma" : "Pausada (Solo manual)"}
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-1 leading-relaxed">
+                Al subir archivos, la plataforma analiza directamente el documento con OCR + parser MRZ/Cédula y valida la integridad de las 3 imágenes. Si confirma ≥ 18 años con alta confianza, el estatus cambia a <strong className="text-emerald-300">APROBADO</strong> al instante. Los casos dudosos pasan aquí como Pendientes.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={togglingAuto}
+            onClick={handleToggleAutoApprove}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition shrink-0 flex items-center gap-2 cursor-pointer disabled:opacity-50 ${
+              autoApproveEnabled
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+            }`}
+          >
+            {togglingAuto ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            <span>{autoApproveEnabled ? "Auto-Aprobación: ON" : "Auto-Aprobación: OFF"}</span>
+          </button>
+        </div>
+
+        {/* Pestañas de filtro rápido */}
+        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-800/80">
+          {(
+            [
+              { id: "ALL", label: `Todos (${docs.length})` },
+              { id: "PENDING", label: `Pendientes (${pendingCount})` },
+              { id: "AUTO_APPROVED", label: `⚡ Auto-Aprobados (${autoApprovedCount})` },
+              { id: "APPROVED", label: `Aprobados (${approvedCount})` },
+              { id: "REJECTED", label: `Rechazados (${rejectedCount})` },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                statusFilter === tab.id
+                  ? "bg-rose-600 text-white shadow-sm shadow-rose-600/30"
+                  : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {feedback && (
         <div
           role="status"
@@ -289,8 +426,8 @@ export default function AdminKycReview({ documents }: Props) {
         </div>
       )}
 
-      {docs.length > 0 ? (
-        docs.map((doc) => (
+      {filteredDocs.length > 0 ? (
+        filteredDocs.map((doc) => (
           <div
             key={doc.id}
             className="p-6 bg-slate-900 border border-slate-800 rounded-3xl shadow-xl flex flex-col gap-5"
@@ -305,7 +442,13 @@ export default function AdminKycReview({ documents }: Props) {
                 </span>
               </div>
 
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {doc.verificationMode === "AUTO" && doc.status === "APPROVED" && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-cyan-500/15 text-cyan-300 border border-cyan-500/35">
+                    <Zap className="w-3 h-3" />
+                    Auto-Aprobado (+18)
+                  </span>
+                )}
                 {doc.status === "PENDING" && (
                   <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">
                     Pendiente de Revisión
@@ -323,6 +466,26 @@ export default function AdminKycReview({ documents }: Props) {
                 )}
               </div>
             </div>
+
+            {doc.autoCheckSummary && (
+              <div
+                className={`px-3.5 py-2.5 rounded-xl border text-[11px] leading-relaxed flex items-start gap-2 ${
+                  doc.verificationMode === "AUTO" && doc.status === "APPROVED"
+                    ? "bg-emerald-950/35 border-emerald-500/25 text-emerald-200"
+                    : "bg-slate-950 border-slate-800 text-slate-300"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong className="text-white">Evaluación Automática:</strong> {doc.autoCheckSummary}
+                  {typeof doc.ocrConfidence === "number" && doc.ocrConfidence > 0 && (
+                    <span className="ml-2 font-mono text-cyan-300">
+                      (OCR {doc.ocrConfidence.toFixed(0)}%)
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
 
             {/* Datos extraídos */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-4 bg-slate-950 border border-slate-800/80 rounded-2xl text-xs">
@@ -450,7 +613,7 @@ export default function AdminKycReview({ documents }: Props) {
             </div>
 
             {/* Botones de acción */}
-            {doc.status === "PENDING" && (
+            {doc.status === "PENDING" ? (
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
@@ -470,7 +633,18 @@ export default function AdminKycReview({ documents }: Props) {
                   Aprobar Mayoría de Edad
                 </button>
               </div>
-            )}
+            ) : doc.status === "APPROVED" ? (
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={loadingId === doc.id}
+                  onClick={() => openRejectModal(doc)}
+                  className="px-3.5 py-1.5 bg-slate-950 hover:bg-red-950/70 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-500/40 rounded-xl text-[11px] font-semibold transition disabled:opacity-50"
+                >
+                  Revocar / Rechazar
+                </button>
+              </div>
+            ) : null}
           </div>
         ))
       ) : (
