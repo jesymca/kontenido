@@ -29,6 +29,7 @@ import { ensureChatSchema } from "@/lib/db/initChat";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { isVenezuelanUser, normalizeGenderValue, serializeInterestedIn } from "@/lib/countries";
 import { createPostForCreator } from "@/lib/posts";
+import { sendPayoutRequestedEmail, formatPaymentMethodLabel } from "@/lib/email";
 
 const RESERVED_USERNAMES = new Set([
   "admin",
@@ -583,6 +584,7 @@ export async function requestPayoutAction(formData: FormData) {
   // 2. Verificar que el método de pago pertenezca a la creadora y esté activo
   const method = await db.query.paymentMethods.findFirst({
     where: and(eq(paymentMethods.id, paymentMethodId), eq(paymentMethods.creatorId, userId)),
+    with: { bank: true },
   });
 
   if (!method || method.isActive !== 1) {
@@ -673,6 +675,22 @@ export async function requestPayoutAction(formData: FormData) {
     notes: txNotes,
     createdAt: now,
   });
+
+  // 9. Notificar por correo a la creadora que su solicitud de retiro fue recibida
+  if (currentUser?.email) {
+    await sendPayoutRequestedEmail({
+      to: currentUser.email,
+      username: currentUser.username,
+      payoutId,
+      grossKoin: amountKoin,
+      feeKoin,
+      feePct: tierInfo.feePct,
+      netKoin,
+      amountVes,
+      usdRateVes: tasaParalelo,
+      paymentMethodLabel: formatPaymentMethodLabel(method),
+    }).catch((err) => console.error("Aviso correo solicitud de retiro:", err));
+  }
 
   revalidatePath("/panel/pagos");
   revalidatePath("/cuenta");

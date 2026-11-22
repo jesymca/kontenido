@@ -13,11 +13,18 @@ import {
   mediaAssets,
   settings,
   payouts,
+  paymentMethods,
   auditLog,
 } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { calculateUserLevel } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
+import {
+  sendAccountApprovedEmail,
+  sendAccountRejectedEmail,
+  sendPayoutApprovedEmail,
+  formatPaymentMethodLabel,
+} from "@/lib/email";
 
 /**
  * Middleware interno para verificar privilegios de SUPER_ADMIN
@@ -144,9 +151,14 @@ export async function updateAdminUserAction(formData: FormData): Promise<{ succe
 
     const now = new Date().toISOString();
 
+    const prevUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    const finalStatus = kycStatus === "APPROVED" && status === "PENDING" ? "ACTIVE" : status;
     const updatePayload: any = {
       role,
-      status: kycStatus === "APPROVED" && status === "PENDING" ? "ACTIVE" : status,
+      status: finalStatus,
       level: Math.min(100, Math.max(0, level)),
       allowDownload,
       vipMembershipId,
@@ -236,6 +248,28 @@ export async function updateAdminUserAction(formData: FormData): Promise<{ succe
         .where(eq(kycDocuments.userId, userId));
     }
 
+    // Notificar por correo si el estatus del usuario cambió a APROBADO / ACTIVO
+    const kycBecameApproved = kycStatus === "APPROVED" && prevUser?.kycStatus !== "APPROVED";
+    const accountBecameActive = finalStatus === "ACTIVE" && prevUser?.status !== "ACTIVE";
+    const kycBecameRejected = kycStatus === "REJECTED" && prevUser?.kycStatus !== "REJECTED";
+
+    if (prevUser?.email && (kycBecameApproved || accountBecameActive)) {
+      await sendAccountApprovedEmail({
+        to: prevUser.email,
+        username: prevUser.username,
+        role,
+        detail: kycBecameApproved
+          ? "Tu validación de identidad y mayoría de edad (+18) fue aprobada por el administrador y tu cuenta ya está activa."
+          : "Tu acceso a la plataforma KONTENIDO ha sido aprobado y activado por el administrador.",
+      }).catch((err) => console.error("Aviso correo aprobación en editor admin:", err));
+    } else if (prevUser?.email && kycBecameRejected) {
+      await sendAccountRejectedEmail({
+        to: prevUser.email,
+        username: prevUser.username,
+        reason: "Rechazado por el administrador. Por favor vuelve a subir tu documentación.",
+      }).catch((err) => console.error("Aviso correo rechazo en editor admin:", err));
+    }
+
     revalidatePath("/admin/usuarios");
     revalidatePath("/admin/kyc");
     revalidatePath("/panel");
@@ -256,6 +290,10 @@ export async function directValidateKycAction(
   try {
     const admin = await requireSuperAdmin();
     const now = new Date().toISOString();
+
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
 
     await db
       .update(users)
@@ -323,6 +361,24 @@ export async function directValidateKycAction(
         .where(eq(kycDocuments.userId, userId));
     }
 
+    if (targetUser?.email) {
+      if (kycStatus === "APPROVED") {
+        await sendAccountApprovedEmail({
+          to: targetUser.email,
+          username: targetUser.username,
+          role: targetUser.role,
+          detail:
+            "Tu validación de identidad y mayoría de edad (+18) fue aprobada directamente por el administrador.",
+        }).catch((err) => console.error("Aviso correo validación directa:", err));
+      } else {
+        await sendAccountRejectedEmail({
+          to: targetUser.email,
+          username: targetUser.username,
+          reason: "Rechazado directamente por el administrador. Por favor vuelve a enviar tus fotos.",
+        }).catch((err) => console.error("Aviso correo rechazo directo:", err));
+      }
+    }
+
     revalidatePath("/admin/usuarios");
     revalidatePath("/admin/kyc");
     revalidatePath("/panel");
@@ -357,6 +413,15 @@ export async function toggleUserSuspensionAction(userId: string, reason?: string
       updatedAt: now,
     })
     .where(eq(users.id, userId));
+
+  if (newStatus === "ACTIVE" && target.email) {
+    await sendAccountApprovedEmail({
+      to: target.email,
+      username: target.username,
+      role: target.role,
+      detail: "Tu cuenta en KONTENIDO ha sido reactivada y ya tienes acceso completo nuevamente.",
+    }).catch((err) => console.error("Aviso correo reactivación cuenta:", err));
+  }
 
   revalidatePath("/admin/usuarios");
   return { success: true, newStatus };
@@ -507,6 +572,10 @@ export async function reviewKycAction(kycDocId: string, status: "APPROVED" | "RE
     .where(eq(kycDocuments.id, kycDocId));
 
   // Si se aprueba, activar cuenta del creador y estado KYC
+  const targetUser = await db.query.users.findFirst({
+    where: eq(users.id, doc.userId),
+  });
+
   if (status === "APPROVED") {
     await db
       .update(users)
@@ -516,6 +585,16 @@ export async function reviewKycAction(kycDocId: string, status: "APPROVED" | "RE
         updatedAt: now,
       })
       .where(eq(users.id, doc.userId));
+
+    if (targetUser?.email) {
+      await sendAccountApprovedEmail({
+        to: targetUser.email,
+        username: targetUser.username,
+        role: targetUser.role,
+        detail:
+          "Tu verificación de identidad y mayoría de edad (+18) fue aprobada por el administrador. ¡Ya puedes usar todas las funciones de KONTENIDO!",
+      }).catch((err) => console.error("Aviso correo aprobación KYC:", err));
+    }
   } else {
     await db
       .update(users)
@@ -524,6 +603,14 @@ export async function reviewKycAction(kycDocId: string, status: "APPROVED" | "RE
         updatedAt: now,
       })
       .where(eq(users.id, doc.userId));
+
+    if (targetUser?.email) {
+      await sendAccountRejectedEmail({
+        to: targetUser.email,
+        username: targetUser.username,
+        reason: reason || "Documentación rechazada por revisión administrativa.",
+      }).catch((err) => console.error("Aviso correo rechazo KYC:", err));
+    }
   }
 
   revalidatePath("/admin/kyc");
@@ -677,17 +764,43 @@ export async function processPayoutAction(formData: FormData) {
     return { error: "La liquidación no fue encontrada." };
   }
 
+  const finalPaymentMethodId = paymentMethodId || existingPayout.paymentMethodId;
+
   await db
     .update(payouts)
     .set({
       status: "PAID",
-      paymentMethodId: paymentMethodId || existingPayout.paymentMethodId,
+      paymentMethodId: finalPaymentMethodId,
       paidBy: admin.id,
       paidAt: now,
       transactionRef,
       proofKey,
     })
     .where(eq(payouts.id, payoutId));
+
+  // Notificar por correo a la creadora que su retiro fue APROBADO y PAGADO con el número de referencia
+  const [creatorUser, methodUsed] = await Promise.all([
+    db.query.users.findFirst({ where: eq(users.id, existingPayout.creatorId) }),
+    finalPaymentMethodId
+      ? db.query.paymentMethods.findFirst({
+          where: eq(paymentMethods.id, finalPaymentMethodId),
+          with: { bank: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  if (creatorUser?.email) {
+    await sendPayoutApprovedEmail({
+      to: creatorUser.email,
+      username: creatorUser.username,
+      payoutId: existingPayout.id,
+      netKoin: existingPayout.netKoin,
+      amountVes: existingPayout.amountVes,
+      transactionRef,
+      paymentMethodLabel: formatPaymentMethodLabel(methodUsed),
+      paidAt: now,
+    }).catch((err) => console.error("Aviso correo retiro aprobado:", err));
+  }
 
   revalidatePath("/admin/payouts");
   revalidatePath("/panel/pagos");

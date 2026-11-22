@@ -19,6 +19,7 @@ import {
   Shield,
   Sparkles,
   Flame,
+  Mail,
 } from "lucide-react";
 
 /**
@@ -191,6 +192,27 @@ export default async function AdminDashboardPage() {
           </div>
           <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-rose-400">
             <span>Controlar sección gratuita</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/correos"
+          className="p-6 bg-slate-900 border border-slate-800 rounded-3xl hover:border-rose-500/50 transition flex flex-col justify-between group shadow-lg"
+        >
+          <div>
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center mb-4">
+              <Mail className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-white mb-1 group-hover:text-emerald-400 transition">
+              Sistema de Correos (Resend)
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Edita los correos de bienvenida, aprobación de acceso, solicitudes de retiro y pagos aprobados con vista previa en vivo.
+            </p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-emerald-400">
+            <span>Configurar correos</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>

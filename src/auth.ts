@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { users, profiles, wallets, agencies } from "@/lib/db/schema";
 import { ensureKomestibleSchema } from "@/lib/db/initKomestible";
 import { normalizeGenderValue, serializeInterestedIn } from "@/lib/countries";
+import { sendWelcomeEmail } from "@/lib/email";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -212,6 +213,13 @@ const nextAuthResult = NextAuth({
           user.country = assignedCountry;
           user.gender = assignedRole === "AGENCY" ? null : assignedGender;
           user.interestedIn = assignedRole === "AGENCY" ? null : assignedInterestedIn;
+
+          // Enviar correo de bienvenida al registrarse por primera vez con Google
+          await sendWelcomeEmail({
+            to: email,
+            username: generatedUsername,
+            role: assignedRole,
+          }).catch((err) => console.error("Aviso correo bienvenida Google:", err));
         } else {
           // Si ya existía como CONSUMER pero eligió registrarse como CREATOR, actualizar rol y perfil
           let currentRole = existing.role;

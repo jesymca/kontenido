@@ -11,6 +11,7 @@ import { eq, and, ne } from "drizzle-orm";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { BUCKETS, getPresignedUploadUrl, getBufferFromR2, isR2Configured } from "@/lib/r2";
+import { sendAccountApprovedEmail } from "@/lib/email";
 
 /**
  * Genera URLs prefirmadas para que la creadora suba los 3 documentos de KYC
@@ -353,6 +354,16 @@ export async function submitKycAction(formData: FormData) {
     ipAddress,
     createdAt: now,
   });
+
+  // Si fue auto-aprobado (+18), notificar por correo inmediatamente al usuario
+  if (canAutoApprove && session.user.email) {
+    await sendAccountApprovedEmail({
+      to: session.user.email,
+      username: session.user.username || fullName,
+      role: session.user.role,
+      detail: `Tu documento de identidad fue validado automáticamente (mayoría de edad verificada: ${actualAge} años) y tu cuenta ha sido activada.`,
+    }).catch((err) => console.error("Aviso correo auto-aprobación KYC:", err));
+  }
 
   revalidatePath("/", "layout");
   revalidatePath("/panel");

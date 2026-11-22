@@ -18,6 +18,7 @@ import {
   Percent,
   Flame,
   Loader2,
+  Mail,
 } from "lucide-react";
 
 const NAV_LINKS = [
@@ -32,6 +33,7 @@ const NAV_LINKS = [
   { href: "/admin/kyc", label: "Validación KYC Cédula", icon: FileCheck },
   { href: "/admin/payouts", label: "Cortes Semanales", icon: DollarSign },
   { href: "/admin/infracciones", label: "Infracciones Anti-Descarga", icon: AlertOctagon },
+  { href: "/admin/correos", label: "Sistema de Correos", icon: Mail },
   { href: "/admin/settings", label: "Configuración General", icon: Settings },
 ];
 

@@ -747,6 +747,25 @@ export const koincidenMessages = sqliteTable("koinciden_messages", {
 
 /**
  * ============================================================================
+ * TABLA: email_logs (Historial de correos transaccionales enviados vía Resend)
+ * ============================================================================
+ */
+export const emailLogs = sqliteTable("email_logs", {
+  id: text("id").primaryKey(),
+  toEmail: text("to_email").notNull(),
+  templateKey: text("template_key").notNull(), // WELCOME, ACCOUNT_APPROVED, ACCOUNT_REJECTED, PAYOUT_REQUESTED, PAYOUT_APPROVED, TEST
+  subject: text("subject").notNull(),
+  status: text("status", { enum: ["SENT", "FAILED", "SKIPPED"] })
+    .notNull()
+    .default("SENT"),
+  providerId: text("provider_id"), // ID devuelto por Resend
+  errorMessage: text("error_message"),
+  meta: text("meta"), // JSON con datos relevantes (userId, payoutId, etc.)
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * ============================================================================
  * RELACIONES DRIZZLE ORM
  * ============================================================================
  */

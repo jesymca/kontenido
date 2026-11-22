@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
+import { sendWelcomeEmail } from "@/lib/email";
 
 const RESERVED_REGISTER_USERNAMES = new Set([
   "admin",
@@ -155,6 +156,13 @@ export async function registerCreatorAction(formData: FormData) {
     updatedAt: now,
   });
 
+  // Enviar correo de bienvenida vía Resend sin bloquear el registro
+  await sendWelcomeEmail({
+    to: email,
+    username,
+    role: "CREATOR",
+  }).catch((err) => console.error("Aviso correo bienvenida CREATOR:", err));
+
   return { success: true };
 }
 
@@ -234,6 +242,13 @@ export async function registerConsumerAction(formData: FormData) {
     totalEarnedKoin: 0.0,
     updatedAt: now,
   });
+
+  // Enviar correo de bienvenida vía Resend sin bloquear el registro
+  await sendWelcomeEmail({
+    to: email,
+    username,
+    role: "CONSUMER",
+  }).catch((err) => console.error("Aviso correo bienvenida CONSUMER:", err));
 
   return { success: true };
 }
@@ -330,6 +345,13 @@ export async function registerAgencyAction(formData: FormData) {
     status: "ACTIVE",
     createdAt: now,
   });
+
+  // Enviar correo de bienvenida vía Resend sin bloquear el registro
+  await sendWelcomeEmail({
+    to: email,
+    username,
+    role: "AGENCY",
+  }).catch((err) => console.error("Aviso correo bienvenida AGENCY:", err));
 
   return { success: true };
 }
