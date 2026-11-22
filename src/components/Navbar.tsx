@@ -264,7 +264,7 @@ export default async function Navbar() {
                 </Link>
               )}
 
-              {effectiveRole === "AGENCY" && (
+              {(effectiveRole === "AGENCY" || effectiveRole === "SUPER_ADMIN") && (
                 <Link
                   href="/agencia"
                   className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-[11px] sm:text-xs font-bold hover:bg-indigo-700 transition whitespace-nowrap shrink-0"

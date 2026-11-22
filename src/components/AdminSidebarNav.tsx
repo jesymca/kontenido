@@ -19,11 +19,13 @@ import {
   Flame,
   Loader2,
   Mail,
+  Building2,
 } from "lucide-react";
 
 const NAV_LINKS = [
   { href: "/admin", label: "Resumen Global", icon: Shield, exact: true },
   { href: "/admin/usuarios", label: "Usuarios y Roles", icon: Users },
+  { href: "/agencia", label: "Panel de Agencias", icon: Building2 },
   { href: "/admin/komestible", label: "KOMESTIBLE & KOINCIDEN", icon: Flame },
   { href: "/admin/comisiones", label: "Comisiones de Creadoras", icon: Percent },
   { href: "/admin/niveles", label: "Niveles (0 a 100)", icon: Award },

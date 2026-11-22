@@ -1,19 +1,24 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { agencies, agencyCreators, posts } from "@/lib/db/schema";
+import { users, agencies, agencyCreators, posts } from "@/lib/db/schema";
 import { ensureChatSchema } from "@/lib/db/initChat";
-import { eq, and, sql } from "drizzle-orm";
-import { LayoutDashboard, Sparkles } from "lucide-react";
+import { eq, and, sql, desc } from "drizzle-orm";
+import { Building2, Shield, Users } from "lucide-react";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import AgencyPanelClient, { type AgencyCreatorItem } from "@/components/AgencyPanelClient";
-import { createAgencyForUserAction } from "@/actions/agency";
+import AgencyOnboardingForm from "@/components/AgencyOnboardingForm";
 
 export const metadata = {
   title: "Panel de Agencia | KONTENIDO",
   description: "Crea y administra perfiles de creadoras, contenido, precios y mensajería.",
 };
 
-export default async function AgenciaPage() {
+interface PageProps {
+  searchParams?: Promise<{ agencyId?: string }>;
+}
+
+export default async function AgenciaPage({ searchParams }: PageProps) {
   await ensureChatSchema();
 
   const session = await auth();
@@ -21,9 +26,40 @@ export default async function AgenciaPage() {
     redirect("/login?callbackUrl=/agencia");
   }
 
-  const agency = await db.query.agencies.findFirst({
-    where: eq(agencies.ownerUserId, session.user.id),
+  const resolvedSearch = searchParams ? await searchParams : {};
+  const requestedAgencyId = resolvedSearch?.agencyId?.trim() || null;
+
+  // Obtener rol actualizado directamente de Turso DB para evitar desfaces del token JWT
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.id, session.user.id),
+    with: { profile: true },
   });
+
+  const effectiveRole = dbUser?.role || session.user.role;
+  const isSuperAdmin = effectiveRole === "SUPER_ADMIN";
+
+  let agency: typeof agencies.$inferSelect | undefined = undefined;
+  let allAgenciesForAdmin: Array<typeof agencies.$inferSelect> = [];
+
+  if (isSuperAdmin) {
+    allAgenciesForAdmin = await db.query.agencies.findMany({
+      orderBy: [desc(agencies.createdAt)],
+    });
+
+    if (requestedAgencyId) {
+      agency = allAgenciesForAdmin.find((a) => a.id === requestedAgencyId);
+    }
+
+    if (!agency) {
+      agency =
+        allAgenciesForAdmin.find((a) => a.ownerUserId === session.user.id) ||
+        allAgenciesForAdmin[0];
+    }
+  } else {
+    agency = await db.query.agencies.findFirst({
+      where: eq(agencies.ownerUserId, session.user.id),
+    });
+  }
 
   let creators: AgencyCreatorItem[] = [];
 
@@ -43,9 +79,11 @@ export default async function AgenciaPage() {
       },
     });
 
-    creators = await Promise.all(
+    const rawCreators = await Promise.all(
       affiliated.map(async (item) => {
         const c = item.creator;
+        if (!c) return null;
+
         let postsCount = 0;
         try {
           const countRes = await db
@@ -72,23 +110,57 @@ export default async function AgenciaPage() {
         };
       })
     );
-  }
 
-  async function initAgencyAction(formData: FormData) {
-    "use server";
-    await createAgencyForUserAction(formData);
+    creators = rawCreators.filter(Boolean) as AgencyCreatorItem[];
   }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
+      {/* Selector de Agencia para SUPER_ADMIN si existen varias agencias */}
+      {isSuperAdmin && allAgenciesForAdmin.length > 0 && (
+        <div className="mb-6 p-4 bg-slate-900/90 border border-indigo-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0">
+              <Shield className="w-3 h-3" />
+              SUPER_ADMIN
+            </span>
+            <span className="text-xs text-slate-300 font-semibold">
+              Viendo agencia: <strong className="text-white">{agency?.name || "Ninguna seleccionada"}</strong>
+            </span>
+          </div>
+
+          {allAgenciesForAdmin.length > 1 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-slate-400">Cambiar agencia:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {allAgenciesForAdmin.map((ag) => (
+                  <Link
+                    key={ag.id}
+                    href={`/agencia?agencyId=${ag.id}`}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                      agency?.id === ag.id
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                        : "bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700"
+                    }`}
+                  >
+                    <Building2 className="w-3 h-3" />
+                    <span>{ag.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2">
-            <LayoutDashboard className="w-7 h-7 text-indigo-500" />
+          <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
+            <Building2 className="w-7 h-7 text-indigo-400 shrink-0" />
             Panel Administrativo de Agencia
           </h1>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
-            Crea perfiles de creadoras, gestiona su contenido, tarifas de acceso, mensajerías y configura tu badge de agencia.
+            Crea y administra perfiles de creadoras, gestiona su contenido, tarifas de acceso, mensajería y configura tu badge distintivo de agencia.
           </p>
         </div>
       </div>
@@ -108,47 +180,14 @@ export default async function AgenciaPage() {
           creators={creators}
         />
       ) : (
-        <form
-          action={initAgencyAction}
-          className="p-8 bg-slate-900 border border-slate-800 rounded-3xl max-w-md mx-auto space-y-4 shadow-xl"
-        >
-          <div className="text-center">
-            <Sparkles className="w-10 h-10 text-indigo-400 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-white">Activa tu Agencia</h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Configura el nombre de tu agencia para comenzar a crear y gestionar perfiles en KONTENIDO.
-            </p>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              Nombre de la Agencia
-            </label>
-            <input
-              name="name"
-              type="text"
-              required
-              placeholder="ej: Velvet Models Agency"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              Descripción (opcional)
-            </label>
-            <textarea
-              name="description"
-              rows={2}
-              placeholder="Agencia de talentos..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition shadow-lg shadow-indigo-600/30"
-          >
-            Crear Agencia y Continuar
-          </button>
-        </form>
+        <AgencyOnboardingForm
+          defaultName={
+            dbUser?.profile?.displayName || dbUser?.username
+              ? `Agencia ${dbUser.profile?.displayName || dbUser.username}`
+              : "Mi Agencia VIP"
+          }
+          isSuperAdmin={isSuperAdmin}
+        />
       )}
     </div>
   );

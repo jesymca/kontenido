@@ -36,6 +36,38 @@ export async function ensureChatSchema() {
         // Ejecutar migraciones idempotentes faltantes
       }
 
+      // Asegurar que las tablas de agencies y agency_creators existan antes de alterar
+      await Promise.all([
+        client
+          .execute(
+            `CREATE TABLE IF NOT EXISTS agencies (
+              id TEXT PRIMARY KEY,
+              owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              name TEXT NOT NULL,
+              logo_key TEXT,
+              description TEXT,
+              badge_text TEXT,
+              badge_color TEXT NOT NULL DEFAULT 'from-indigo-500 via-purple-500 to-rose-500',
+              show_badge INTEGER NOT NULL DEFAULT 1,
+              commission_pct REAL NOT NULL DEFAULT 10.0,
+              status TEXT NOT NULL DEFAULT 'ACTIVE',
+              created_at TEXT NOT NULL
+            )`
+          )
+          .catch(() => {}),
+        client
+          .execute(
+            `CREATE TABLE IF NOT EXISTS agency_creators (
+              id TEXT PRIMARY KEY,
+              agency_id TEXT NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+              creator_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              status TEXT NOT NULL DEFAULT 'ACCEPTED',
+              joined_at TEXT NOT NULL
+            )`
+          )
+          .catch(() => {}),
+      ]);
+
       const alters = [
         `ALTER TABLE profiles ADD COLUMN chat_price_koin REAL NOT NULL DEFAULT 5.0`,
         `ALTER TABLE profiles ADD COLUMN chat_duration_hours INTEGER NOT NULL DEFAULT 168`,

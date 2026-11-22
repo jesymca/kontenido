@@ -52,12 +52,10 @@ export default auth((req) => {
     }
 
     // 4. Proteger rutas de Agencia (/agencia/*)
+    // Se requiere sesión activa en el Edge; la verificación de rol y activación de agencia se resuelve en el servidor
     if (pathname.startsWith("/agencia")) {
       if (!user) {
         return NextResponse.redirect(new URL(`/login?callbackUrl=${encodeURIComponent(pathname)}`, nextUrl));
-      }
-      if (user.role !== "AGENCY" && user.role !== "SUPER_ADMIN") {
-        return NextResponse.redirect(new URL("/", nextUrl));
       }
     }
 

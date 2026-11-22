@@ -35,8 +35,8 @@ const RESERVED_USERNAMES = new Set([
 export async function createAgencyForUserAction(formData: FormData) {
   await ensureChatSchema();
   const session = await auth();
-  if (!session?.user || (session.user.role !== "AGENCY" && session.user.role !== "SUPER_ADMIN")) {
-    return { error: "No autorizado" };
+  if (!session?.user) {
+    return { error: "Debes iniciar sesión para activar una agencia." };
   }
 
   const name = (formData.get("name") as string)?.trim();
@@ -52,21 +52,33 @@ export async function createAgencyForUserAction(formData: FormData) {
     return { error: "Ya tienes una agencia registrada." };
   }
 
+  const now = new Date().toISOString();
+
+  // Si el usuario no era AGENCY ni SUPER_ADMIN, actualizar su rol a AGENCY
+  if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "AGENCY") {
+    await db
+      .update(users)
+      .set({ role: "AGENCY", updatedAt: now })
+      .where(eq(users.id, session.user.id));
+  }
+
+  const agencyId = crypto.randomUUID();
   await db.insert(agencies).values({
-    id: crypto.randomUUID(),
+    id: agencyId,
     ownerUserId: session.user.id,
     name,
-    description: description || null,
+    description: description || `Agencia oficial de talentos ${name} en KONTENIDO.`,
     badgeText: name,
     badgeColor: "from-indigo-500 via-purple-500 to-rose-500",
     showBadge: 1,
     commissionPct: 10.0,
     status: "ACTIVE",
-    createdAt: new Date().toISOString(),
+    createdAt: now,
   });
 
   revalidatePath("/agencia");
-  return { success: true };
+  revalidatePath("/", "layout");
+  return { success: true, agencyId };
 }
 
 /**
@@ -79,9 +91,12 @@ export async function updateAgencySettingsAction(formData: FormData) {
     return { error: "No autorizado" };
   }
 
-  const agency = await db.query.agencies.findFirst({
-    where: eq(agencies.ownerUserId, session.user.id),
-  });
+  const targetAgencyId = (formData.get("agencyId") as string)?.trim();
+  const agency =
+    session.user.role === "SUPER_ADMIN" && targetAgencyId
+      ? await db.query.agencies.findFirst({ where: eq(agencies.id, targetAgencyId) })
+      : await db.query.agencies.findFirst({ where: eq(agencies.ownerUserId, session.user.id) });
+
   if (!agency) {
     return { error: "Agencia no encontrada." };
   }
@@ -134,9 +149,12 @@ export async function createAgencyCreatorAction(formData: FormData) {
     return { error: "No autorizado" };
   }
 
-  const agency = await db.query.agencies.findFirst({
-    where: eq(agencies.ownerUserId, session.user.id),
-  });
+  const targetAgencyId = (formData.get("agencyId") as string)?.trim();
+  const agency =
+    session.user.role === "SUPER_ADMIN" && targetAgencyId
+      ? await db.query.agencies.findFirst({ where: eq(agencies.id, targetAgencyId) })
+      : await db.query.agencies.findFirst({ where: eq(agencies.ownerUserId, session.user.id) });
+
   if (!agency) {
     return { error: "No se encontró tu agencia." };
   }
@@ -198,8 +216,8 @@ export async function createAgencyCreatorAction(formData: FormData) {
     email: internalEmail,
     passwordHash: null,
     role: "CREATOR",
-    status: "PENDING",
-    kycStatus: "NONE",
+    status: agency.status === "ACTIVE" ? "ACTIVE" : "PENDING",
+    kycStatus: agency.status === "ACTIVE" ? "APPROVED" : "PENDING",
     country: session.user.country || "VE",
     gender: creatorCategory,
     level: 0,

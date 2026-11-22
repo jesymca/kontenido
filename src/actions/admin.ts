@@ -15,6 +15,7 @@ import {
   payouts,
   paymentMethods,
   auditLog,
+  agencies,
 } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { calculateUserLevel } from "@/lib/utils";
@@ -183,6 +184,28 @@ export async function updateAdminUserAction(formData: FormData): Promise<{ succe
       .update(users)
       .set(updatePayload)
       .where(eq(users.id, userId));
+
+    // Si el rol es AGENCY, garantizar que exista registro en la tabla `agencies`
+    if (role === "AGENCY") {
+      const existingAgency = await db.query.agencies.findFirst({
+        where: eq(agencies.ownerUserId, userId),
+      });
+      if (!existingAgency) {
+        const agencyName = prevUser?.username ? `Agencia ${prevUser.username}` : "Nueva Agencia";
+        await db.insert(agencies).values({
+          id: crypto.randomUUID(),
+          ownerUserId: userId,
+          name: agencyName,
+          description: `Agencia oficial de talentos administrada por @${prevUser?.username || "agencia"}.`,
+          badgeText: prevUser?.username ? `${prevUser.username.toUpperCase()} VIP` : "AGENCIA VIP",
+          badgeColor: "from-indigo-500 via-purple-500 to-rose-500",
+          showBadge: 1,
+          commissionPct: 10.0,
+          status: "ACTIVE",
+          createdAt: now,
+        });
+      }
+    }
 
     // Si el SUPER_ADMIN valida directamente la identidad y mayoría de edad como APPROVED:
     if (kycStatus === "APPROVED") {

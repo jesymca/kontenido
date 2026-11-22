@@ -92,6 +92,7 @@ export default function AgencyPanelClient({ agency, creators }: Props) {
     setAgencyMsg(null);
 
     const formData = new FormData();
+    formData.set("agencyId", agency.id);
     formData.set("name", agencyName);
     formData.set("description", agencyDesc);
     formData.set("badgeText", badgeText);
@@ -120,6 +121,7 @@ export default function AgencyPanelClient({ agency, creators }: Props) {
     setCreatorSuccess(null);
 
     const formData = new FormData(e.currentTarget);
+    formData.set("agencyId", agency.id);
     formData.set("creatorCategory", newCategory);
 
     try {
