@@ -531,8 +531,10 @@ export async function deletePostWithBackupAction(postId: string) {
     createdAt: now,
   });
 
-  revalidatePath(`/${session.user.username}`);
+  revalidatePath(`/${target.username}`);
   revalidatePath("/panel");
+  revalidatePath("/admin/contenido");
+  revalidatePath("/");
 
   return {
     success: true,

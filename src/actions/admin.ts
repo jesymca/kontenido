@@ -660,23 +660,75 @@ export async function toggleKycAutoApproveAction(enabled: boolean) {
 /**
  * Moderación de contenido (Aprobar o Bloquear post)
  */
-export async function moderatePostAction(postId: string, status: "APPROVED" | "REJECTED", reason?: string) {
-  const admin = await requireSuperAdmin();
-  const now = new Date().toISOString();
+export async function moderatePostAction(
+  postId: string,
+  status: "APPROVED" | "REJECTED",
+  reason?: string
+) {
+  try {
+    const admin = await requireSuperAdmin();
+    const now = new Date().toISOString();
 
-  await db
-    .update(posts)
-    .set({
-      status,
-      reviewedBy: admin.id,
-      reviewedAt: now,
-      rejectionReason: status === "REJECTED" ? reason : null,
-      updatedAt: now,
-    })
-    .where(eq(posts.id, postId));
+    const existingPost = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { creator: true },
+    });
 
-  revalidatePath("/admin/contenido");
-  return { success: true };
+    if (!existingPost) {
+      return { error: "Publicación no encontrada." };
+    }
+
+    const cleanReason =
+      status === "REJECTED"
+        ? reason?.trim() || "Incumplimiento de normas de contenido"
+        : null;
+
+    await Promise.all([
+      db
+        .update(posts)
+        .set({
+          status,
+          reviewedBy: admin.id,
+          reviewedAt: now,
+          rejectionReason: cleanReason,
+          updatedAt: now,
+        })
+        .where(eq(posts.id, postId)),
+      db
+        .update(mediaAssets)
+        .set({
+          moderationStatus: status === "APPROVED" ? "OK" : "BLOCKED",
+        })
+        .where(eq(mediaAssets.postId, postId)),
+      db.insert(auditLog).values({
+        id: crypto.randomUUID(),
+        actorId: admin.id,
+        action: status === "APPROVED" ? "POST_APPROVED" : "POST_BLOCKED",
+        entity: "posts",
+        entityId: postId,
+        meta: JSON.stringify({
+          title: existingPost.title,
+          creatorId: existingPost.creatorId,
+          status,
+          reason: cleanReason,
+        }),
+        ipAddress: "127.0.0.1",
+        createdAt: now,
+      }),
+    ]);
+
+    revalidatePath("/admin/contenido");
+    revalidatePath("/panel");
+    revalidatePath("/");
+    if (existingPost.creator?.username) {
+      revalidatePath(`/${existingPost.creator.username}`);
+    }
+
+    return { success: true, status, rejectionReason: cleanReason };
+  } catch (err: any) {
+    console.error("Error en moderatePostAction:", err);
+    return { error: err?.message || "No se pudo actualizar el estado del contenido." };
+  }
 }
 
 /**

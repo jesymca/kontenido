@@ -1,8 +1,10 @@
 import { db } from "@/lib/db";
-import { posts, mediaAssets, users } from "@/lib/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { posts } from "@/lib/db/schema";
+import { desc } from "drizzle-orm";
 import AdminContentModeration from "@/components/AdminContentModeration";
 import { ImageIcon } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 /**
  * Vista de Moderación y CRUD de Contenido (/admin/contenido)

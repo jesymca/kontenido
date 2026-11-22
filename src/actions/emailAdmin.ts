@@ -2,14 +2,20 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { settings, auditLog } from "@/lib/db/schema";
+import { settings, auditLog, kycDocuments, users, payouts } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { ensureEmailSchema } from "@/lib/db/initEmail";
 import {
   DEFAULT_EMAIL_TEMPLATES,
   EMAIL_TEMPLATE_ORDER,
   type EmailTemplateKey,
 } from "@/lib/emailTemplates";
-import { sendTestTemplateEmail } from "@/lib/email";
+import {
+  sendTestTemplateEmail,
+  sendKycStatusNotificationEmail,
+  sendTemplateEmailToSpecificUser,
+  formatPaymentMethodLabel,
+} from "@/lib/email";
 import { revalidatePath } from "next/cache";
 
 async function requireSuperAdmin() {
@@ -232,5 +238,231 @@ export async function sendTestEmailAction(templateKey: EmailTemplateKey, toEmail
     };
   } catch (err: any) {
     return { error: err?.message || "Error inesperado enviando correo de prueba." };
+  }
+}
+
+/**
+ * Envía directamente desde /admin/kyc un correo al usuario con su estatus actual
+ * (ej. Perfil ACTIVO / APROBADO, En Revisión o Rechazado).
+ */
+export async function sendKycStatusEmailAction(kycDocId: string) {
+  try {
+    const admin = await requireSuperAdmin();
+    await ensureEmailSchema();
+
+    const doc = await db.query.kycDocuments.findFirst({
+      where: eq(kycDocuments.id, kycDocId),
+    });
+
+    if (!doc) {
+      return { error: "Documento KYC no encontrado." };
+    }
+
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.id, doc.userId),
+    });
+
+    if (!targetUser) {
+      return { error: "Usuario asociado al documento no encontrado." };
+    }
+
+    if (!targetUser.email || !targetUser.email.includes("@")) {
+      return {
+        error: `El usuario @${targetUser.username} no tiene un correo electrónico válido registrado.`,
+      };
+    }
+
+    const res = await sendKycStatusNotificationEmail({
+      to: targetUser.email,
+      username: targetUser.username,
+      role: targetUser.role,
+      accountStatus: targetUser.status,
+      kycStatus: targetUser.kycStatus,
+      docStatus: doc.status,
+      rejectionReason: doc.rejectionReason,
+    });
+
+    if (!res.success) {
+      return {
+        error: res.error || "No se pudo enviar el correo de estatus vía Resend.",
+      };
+    }
+
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(),
+      actorId: admin.id,
+      action: "KYC_STATUS_EMAIL_SENT",
+      entity: "kyc_documents",
+      entityId: doc.id,
+      meta: JSON.stringify({
+        toEmail: targetUser.email,
+        username: targetUser.username,
+        docStatus: doc.status,
+        accountStatus: targetUser.status,
+        providerId: res.providerId,
+      }),
+      ipAddress: "127.0.0.1",
+      createdAt: new Date().toISOString(),
+    });
+
+    revalidatePath("/admin/kyc");
+    revalidatePath("/admin/correos");
+
+    const statusSummary =
+      doc.status === "APPROVED" || targetUser.status === "ACTIVE"
+        ? "Perfil ACTIVO / APROBADO"
+        : doc.status === "REJECTED"
+        ? "Verificación RECHAZADA"
+        : "Verificación EN REVISIÓN";
+
+    return {
+      success: true,
+      providerId: res.providerId,
+      message: `Correo enviado a @${targetUser.username} (${targetUser.email}) notificando: ${statusSummary}.`,
+    };
+  } catch (err: any) {
+    return {
+      error: err?.message || "Error inesperado enviando correo de estatus KYC.",
+    };
+  }
+}
+
+/**
+ * Envía una plantilla establecida (con personalización opcional solo para ese envío)
+ * a un usuario específico seleccionado desde la sección dedicada en /admin/correos.
+ */
+export async function sendEmailToUserAction(input: {
+  userId: string;
+  templateKey: EmailTemplateKey;
+  customSubject?: string;
+  customHeadline?: string;
+  customBody?: string;
+  customCtaText?: string;
+  customCtaPath?: string;
+}) {
+  try {
+    const admin = await requireSuperAdmin();
+    await ensureEmailSchema();
+
+    if (!input.userId?.trim()) {
+      return { error: "Selecciona un usuario destinatario antes de enviar." };
+    }
+
+    if (!EMAIL_TEMPLATE_ORDER.includes(input.templateKey)) {
+      return { error: "Plantilla de correo no válida." };
+    }
+
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.id, input.userId.trim()),
+    });
+
+    if (!targetUser) {
+      return { error: "El usuario seleccionado no fue encontrado." };
+    }
+
+    if (!targetUser.email || !targetUser.email.includes("@")) {
+      return {
+        error: `El usuario @${targetUser.username} no posee un correo electrónico válido.`,
+      };
+    }
+
+    // Buscar datos reales complementarios según la plantilla seleccionada
+    let latestPayoutData: {
+      id: string;
+      grossKoin: number;
+      feeKoin: number;
+      feePct: number;
+      netKoin: number;
+      amountVes?: number | null;
+      transactionRef?: string | null;
+      paymentMethodLabel: string;
+      paidAt?: string | null;
+    } | null = null;
+
+    let rejectionReason: string | null = null;
+
+    if (input.templateKey === "PAYOUT_REQUESTED" || input.templateKey === "PAYOUT_APPROVED") {
+      const latestPayout = await db.query.payouts.findFirst({
+        where: eq(payouts.creatorId, targetUser.id),
+        orderBy: [desc(payouts.createdAt)],
+        with: {
+          paymentMethod: {
+            with: { bank: true },
+          },
+        },
+      });
+
+      if (latestPayout) {
+        latestPayoutData = {
+          id: latestPayout.id,
+          grossKoin: latestPayout.grossKoin,
+          feeKoin: latestPayout.feeKoin,
+          feePct: latestPayout.feePct,
+          netKoin: latestPayout.netKoin,
+          amountVes: latestPayout.amountVes,
+          transactionRef: latestPayout.transactionRef,
+          paymentMethodLabel: formatPaymentMethodLabel(latestPayout.paymentMethod),
+          paidAt: latestPayout.paidAt,
+        };
+      }
+    } else if (input.templateKey === "ACCOUNT_REJECTED") {
+      const latestKyc = await db.query.kycDocuments.findFirst({
+        where: eq(kycDocuments.userId, targetUser.id),
+        orderBy: [desc(kycDocuments.createdAt)],
+      });
+      rejectionReason = latestKyc?.rejectionReason || null;
+    }
+
+    const res = await sendTemplateEmailToSpecificUser({
+      to: targetUser.email,
+      username: targetUser.username,
+      role: targetUser.role,
+      accountStatus: targetUser.status,
+      kycStatus: targetUser.kycStatus,
+      templateKey: input.templateKey,
+      customSubject: input.customSubject,
+      customHeadline: input.customHeadline,
+      customBody: input.customBody,
+      customCtaText: input.customCtaText,
+      customCtaPath: input.customCtaPath,
+      latestPayout: latestPayoutData,
+      rejectionReason,
+    });
+
+    if (!res.success) {
+      return {
+        error: res.error || "No se pudo enviar el correo al usuario vía Resend.",
+      };
+    }
+
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(),
+      actorId: admin.id,
+      action: "EMAIL_SENT_TO_USER",
+      entity: "users",
+      entityId: targetUser.id,
+      meta: JSON.stringify({
+        toEmail: targetUser.email,
+        username: targetUser.username,
+        templateKey: input.templateKey,
+        providerId: res.providerId,
+      }),
+      ipAddress: "127.0.0.1",
+      createdAt: new Date().toISOString(),
+    });
+
+    revalidatePath("/admin/correos");
+
+    return {
+      success: true,
+      providerId: res.providerId,
+      message: `Correo "${DEFAULT_EMAIL_TEMPLATES[input.templateKey].label}" enviado con éxito a @${targetUser.username} (${targetUser.email})${
+        res.providerId ? ` • ID: ${res.providerId}` : ""
+      }.`,
+    };
+  } catch (err: any) {
+    return {
+      error: err?.message || "Error inesperado enviando correo al usuario.",
+    };
   }
 }

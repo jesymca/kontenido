@@ -9,7 +9,8 @@ export type EmailTemplateKey =
   | "ACCOUNT_APPROVED"
   | "ACCOUNT_REJECTED"
   | "PAYOUT_REQUESTED"
-  | "PAYOUT_APPROVED";
+  | "PAYOUT_APPROVED"
+  | "PLATFORM_CTA";
 
 export interface EmailTemplateConfig {
   key: EmailTemplateKey;
@@ -193,6 +194,33 @@ Los fondos ya fueron transferidos a tu método de cobro configurado. Debajo enco
       { token: "{{paidAt}}", desc: "Fecha y hora del pago" },
     ],
   },
+
+  PLATFORM_CTA: {
+    key: "PLATFORM_CTA",
+    label: "Invitación a Usar la Plataforma (CTA)",
+    description:
+      "Plantilla personalizable de llamado a la acción para invitar a los usuarios a ingresar, descubrir novedades, participar en KOMESTIBLE o publicar contenido. Puedes cambiar su texto cuando quieras.",
+    accent: "rose",
+    enabled: true,
+    subject: "🔥 ¡Hola {{username}}, hay novedades esperándote en KONTENIDO!",
+    badgeText: "NOVEDADES • KONTENIDO",
+    headline: "¡ES MOMENTO DE ENTRAR A KONTENIDO!",
+    body: `Hola {{username}},
+
+Queremos recordarte que tu cuenta como {{roleLabel}} en KONTENIDO está lista esperándote.
+
+Cada día se suman nuevos perfiles, contenido exclusivo y coincidencias en nuestra sección gratuita KOMESTIBLE & KOINCIDEN. Ya sea que quieras descubrir nuevas creadoras, recibir valoraciones en tus fotos o monetizar tu contenido con KOIN, hoy es el mejor momento para volver a entrar.
+
+Haz clic en el botón de abajo para ingresar ahora mismo y aprovechar todas las novedades de la plataforma.`,
+    ctaText: "Entrar a KONTENIDO ahora →",
+    ctaPath: "/",
+    availableVars: [
+      { token: "{{username}}", desc: "Usuario destinatario" },
+      { token: "{{roleLabel}}", desc: "Tipo de cuenta (Creador / Consumidor / Agencia)" },
+      { token: "{{statusLabel}}", desc: "Estatus actual del perfil" },
+      { token: "{{appUrl}}", desc: "URL principal de la plataforma" },
+    ],
+  },
 };
 
 export const EMAIL_TEMPLATE_ORDER: EmailTemplateKey[] = [
@@ -201,6 +229,7 @@ export const EMAIL_TEMPLATE_ORDER: EmailTemplateKey[] = [
   "PAYOUT_REQUESTED",
   "PAYOUT_APPROVED",
   "ACCOUNT_REJECTED",
+  "PLATFORM_CTA",
 ];
 
 /**
@@ -286,6 +315,19 @@ export const SAMPLE_EMAIL_VARS: Record<
       { label: "Método de Cobro", value: "PagoMóvil — Banco de Venezuela" },
       { label: "Fecha de Pago", value: "22/11/2026, 12:15 p. m." },
       { label: "Estatus", value: "APROBADO Y PAGADO ✓" },
+    ],
+  },
+  PLATFORM_CTA: {
+    vars: {
+      username: "sofia_vip",
+      roleLabel: "Creador de Contenido",
+      statusLabel: "ACTIVO",
+      appUrl: "https://www.kontenido.online",
+    },
+    highlights: [
+      { label: "Tu cuenta", value: "@sofia_vip" },
+      { label: "Estatus actual", value: "ACTIVO ✓", highlight: true },
+      { label: "Explora gratis", value: "KOMESTIBLE & KOINCIDEN" },
     ],
   },
 };

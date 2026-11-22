@@ -31,7 +31,14 @@ export default async function AdminKycPage() {
   const [relatedUsers, signedUrlsList] = await Promise.all([
     uniqueUserIds.length > 0
       ? db
-          .select({ id: users.id, username: users.username })
+          .select({
+            id: users.id,
+            username: users.username,
+            email: users.email,
+            role: users.role,
+            status: users.status,
+            kycStatus: users.kycStatus,
+          })
           .from(users)
           .where(inArray(users.id, uniqueUserIds))
       : Promise.resolve([]),
@@ -55,13 +62,19 @@ export default async function AdminKycPage() {
     ),
   ]);
 
-  const userMap = new Map(relatedUsers.map((u) => [u.id, u.username]));
+  const userMap = new Map(relatedUsers.map((u) => [u.id, u]));
 
-  const enrichedDocs = allDocs.map((doc, idx) => ({
-    ...doc,
-    username: userMap.get(doc.userId) || "Desconocido",
-    urls: signedUrlsList[idx] || { frontUrl: "", backUrl: "", selfieUrl: "" },
-  }));
+  const enrichedDocs = allDocs.map((doc, idx) => {
+    const userInfo = userMap.get(doc.userId);
+    return {
+      ...doc,
+      username: userInfo?.username || "Desconocido",
+      userEmail: userInfo?.email || null,
+      userStatus: userInfo?.status || "PENDING",
+      userRole: userInfo?.role || "CREATOR",
+      urls: signedUrlsList[idx] || { frontUrl: "", backUrl: "", selfieUrl: "" },
+    };
+  });
 
   return (
     <div className="space-y-6 max-w-5xl">

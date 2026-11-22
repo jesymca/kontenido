@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { reviewKycAction, toggleKycAutoApproveAction } from "@/actions/admin";
+import { sendKycStatusEmailAction } from "@/actions/emailAdmin";
 import {
   Check,
   X,
@@ -20,12 +21,17 @@ import {
   Eye,
   Sparkles,
   Zap,
+  Mail,
+  Send,
 } from "lucide-react";
 
 interface KycItem {
   id: string;
   userId: string;
   username: string;
+  userEmail?: string | null;
+  userStatus?: "PENDING" | "ACTIVE" | "SUSPENDED";
+  userRole?: string;
   documentType: string;
   extractedCedula: string | null;
   extractedFullName: string | null;
@@ -64,6 +70,8 @@ export default function AdminKycReview({
   const router = useRouter();
   const [docs, setDocs] = useState<KycItem[]>(documents);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [notifiedIds, setNotifiedIds] = useState<Record<string, boolean>>({});
   const [autoApproveEnabled, setAutoApproveEnabled] = useState<boolean>(
     initialAutoApproveEnabled
   );
@@ -249,6 +257,7 @@ export default function AdminKycReview({
             ? {
                 ...item,
                 status: type,
+                userStatus: type === "APPROVED" ? "ACTIVE" : item.userStatus,
                 rejectionReason: type === "REJECTED" ? trimmedReason : null,
               }
             : item
@@ -295,6 +304,32 @@ export default function AdminKycReview({
       });
     } finally {
       setTogglingAuto(false);
+    }
+  };
+
+  const handleSendStatusEmail = async (doc: KycItem) => {
+    setSendingEmailId(doc.id);
+    setFeedback(null);
+    try {
+      const res = await sendKycStatusEmailAction(doc.id);
+      if (res?.error) {
+        setFeedback({ type: "error", message: res.error });
+      } else {
+        setNotifiedIds((prev) => ({ ...prev, [doc.id]: true }));
+        setFeedback({
+          type: "success",
+          message:
+            res?.message ||
+            `Correo de estatus enviado a @${doc.username}${doc.userEmail ? ` (${doc.userEmail})` : ""}.`,
+        });
+      }
+    } catch {
+      setFeedback({
+        type: "error",
+        message: `No se pudo enviar el correo de estatus a @${doc.username}.`,
+      });
+    } finally {
+      setSendingEmailId(null);
     }
   };
 
@@ -434,12 +469,35 @@ export default function AdminKycReview({
           >
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
-                <span className="text-xs font-bold text-slate-400 block mb-0.5">
-                  Creadora: <strong className="text-white text-sm">@{doc.username}</strong>
-                </span>
-                <span className="text-[11px] text-slate-500 font-mono">
-                  Enviado: {new Date(doc.createdAt).toLocaleString("es-VE")}
-                </span>
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <span className="text-xs font-bold text-slate-400">
+                    Usuario: <strong className="text-white text-sm">@{doc.username}</strong>
+                  </span>
+                  {doc.userStatus === "ACTIVE" ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/35">
+                      Perfil: ACTIVO
+                    </span>
+                  ) : doc.userStatus === "SUSPENDED" ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-red-500/15 text-red-300 border border-red-500/35">
+                      Perfil: SUSPENDIDO
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/15 text-amber-300 border border-amber-500/35">
+                      Perfil: PENDIENTE
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-400">
+                  {doc.userEmail && (
+                    <span className="inline-flex items-center gap-1 font-mono text-slate-300">
+                      <Mail className="w-3 h-3 text-rose-400" />
+                      {doc.userEmail}
+                    </span>
+                  )}
+                  <span className="text-slate-500 font-mono">
+                    Enviado: {new Date(doc.createdAt).toLocaleString("es-VE")}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -456,7 +514,7 @@ export default function AdminKycReview({
                 )}
                 {doc.status === "APPROVED" && (
                   <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    Aprobado ✓
+                    KYC Aprobado ✓
                   </span>
                 )}
                 {doc.status === "REJECTED" && (
@@ -612,39 +670,95 @@ export default function AdminKycReview({
               </div>
             </div>
 
-            {/* Botones de acción */}
-            {doc.status === "PENDING" ? (
-              <div className="flex items-center justify-end gap-3 pt-2">
+            {/* Botones de acción + Envío directo de correo con estatus */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
+              {/* Botón de envío de correo con estatus actual del perfil */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  disabled={loadingId === doc.id}
-                  onClick={() => openRejectModal(doc)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+                  disabled={sendingEmailId === doc.id || !doc.userEmail}
+                  onClick={() => handleSendStatusEmail(doc)}
+                  title={
+                    doc.userEmail
+                      ? `Enviar correo a ${doc.userEmail} informando el estatus actual`
+                      : "Este usuario no tiene correo electrónico registrado"
+                  }
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                    doc.status === "APPROVED" || doc.userStatus === "ACTIVE"
+                      ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/25"
+                      : doc.status === "REJECTED"
+                      ? "bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/40"
+                      : "bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40"
+                  }`}
                 >
-                  Rechazar
+                  {sendingEmailId === doc.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {sendingEmailId === doc.id
+                      ? "Enviando correo..."
+                      : doc.status === "APPROVED" || doc.userStatus === "ACTIVE"
+                      ? "Enviar Correo: Perfil Activo"
+                      : doc.status === "REJECTED"
+                      ? "Enviar Correo: Estatus Rechazado"
+                      : "Enviar Correo: En Revisión"}
+                  </span>
                 </button>
-                <button
-                  type="button"
-                  disabled={loadingId === doc.id}
-                  onClick={() => openApproveModal(doc)}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  Aprobar Mayoría de Edad
-                </button>
+
+                {notifiedIds[doc.id] && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-[11px] font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Correo enviado
+                  </span>
+                )}
               </div>
-            ) : doc.status === "APPROVED" ? (
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  disabled={loadingId === doc.id}
-                  onClick={() => openRejectModal(doc)}
-                  className="px-3.5 py-1.5 bg-slate-950 hover:bg-red-950/70 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-500/40 rounded-xl text-[11px] font-semibold transition disabled:opacity-50"
-                >
-                  Revocar / Rechazar
-                </button>
+
+              {/* Botones de decisión KYC */}
+              <div className="flex items-center justify-end gap-2.5">
+                {doc.status === "PENDING" ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={loadingId === doc.id}
+                      onClick={() => openRejectModal(doc)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 rounded-xl text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                    >
+                      Rechazar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loadingId === doc.id}
+                      onClick={() => openApproveModal(doc)}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      Aprobar Mayoría de Edad
+                    </button>
+                  </>
+                ) : doc.status === "APPROVED" ? (
+                  <button
+                    type="button"
+                    disabled={loadingId === doc.id}
+                    onClick={() => openRejectModal(doc)}
+                    className="px-3.5 py-2 bg-slate-950 hover:bg-red-950/70 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-500/40 rounded-xl text-[11px] font-semibold transition disabled:opacity-50 cursor-pointer"
+                  >
+                    Revocar / Rechazar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={loadingId === doc.id}
+                    onClick={() => openApproveModal(doc)}
+                    className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Aprobar y Activar Perfil
+                  </button>
+                )}
               </div>
-            ) : null}
+            </div>
           </div>
         ))
       ) : (
